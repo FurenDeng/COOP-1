@@ -491,7 +491,7 @@ contains
        write(*,*) "Warning: COOP only does Hankel Transform up to m = 10"
        mmax = 10
     endif
-    allocate(cr(1:n, 0:mmax), sr(1:n, 0:mmax), ck(1:n, 1:mmax), sk(1:n, 0:mmax))
+    allocate(cr(1:n, 0:mmax), sr(1:n, 0:mmax), ck(1:n, 0:mmax), sk(1:n, 0:mmax))
     if(use_degree)then
        dr = radius/n
     else
