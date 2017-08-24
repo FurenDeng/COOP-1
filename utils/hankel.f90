@@ -15,7 +15,7 @@ module coop_hankel_mod
 #include "jmaxmin.h"
 #include "jzeros.h"  
 
-  public::coop_hankel_kernel
+  public::coop_hankel_kernel, coop_2D_radial_decompose
   
   type coop_hankel_kernel
      COOP_INT::m
@@ -146,8 +146,77 @@ contains
     endif
     s = s/l**2
   end function coop_hankel_kernel_integrate
-  
 
+  !!decompose f(r, phi) = \sum_{m=0}^{\infty} C_m(r)\cos{m\phi} + S_m(r)\sin{m\phi}
+  subroutine coop_2D_radial_decompose(n, f, mmax, Cr, Sr, Ck, Sk)
+    COOP_INT::n, mmax, m
+    COOP_REAL::f(-n:n, -n:n)
+    COOP_REAL::Cr(1:n, 0:mmax), Sr(1:n, 0:mmax)
+    COOP_REAL,optional::Ck(1:n, 0:mmax), Sk(1:n, 0:mmax)
+    COOP_INT::i, ix, iy, nsteps, j
+    COOP_REAL::dtheta, r, theta, rx, ry, fv, l
+    type(coop_hankel_kernel)::hankel
+    nsteps = n*20
+    dtheta = coop_2pi/nsteps
+    Cr = 0.d0
+    Sr = 0.d0
+    do i=1, n
+       r = dble(i)
+       do j=0, nsteps-1
+          theta = dtheta*j
+          rx = r*cos(theta)
+          ry = r*sin(theta)
+          ix = min(floor(rx), n-1)
+          iy = min(floor(ry), n-1)
+          rx = rx - ix
+          ry = ry - iy
+          fv = (1.d0-rx)*(f(ix, iy)*(1.d0-ry) + f(ix, iy+1)*ry) &
+               + rx * ( f(ix+1, iy)*(1.d0-ry) + f(ix+1, iy+1)*ry)
+          Cr(i, 0) = Cr(i, 0) + fv
+          do m = 1, mmax
+             Cr(i, m) = Cr(i, m) + fv * cos(m*theta)
+             Sr(i, m) = Sr(i, m) + fv * sin(m*theta)             
+          enddo
+       enddo       
+    enddo
+    Cr(1:n,0) = Cr(1:n, 0)/nsteps 
+    Cr(1:n,1:mmax) =  Cr(1:n,1:mmax) * (2.d0/nsteps)
+    Sr(1:n,1:mmax) =  Sr(1:n,1:mmax) * (2.d0/nsteps)
+    if(present(Ck) .and. present(Sk))then
+       Sk(:,0) = 0.d0
+       do m=0, mmax
+          call hankel%init(m)
+          do i=1, n
+             l = dble(i)
+             Ck(i,m) = hankel%integrate(crtemp, l)
+             if(m.ne.0)Sk(i, m)= hankel%integrate(srtemp, l)
+          enddo
+          call hankel%free()
+       enddo
+    endif
+  contains
+    function crtemp(r)
+      COOP_REAL::r, crtemp
+      COOP_INT::ir
+      COOP_REAL::s
+      ir = min(floor(r), n-1)
+      s = r - ir
+      crtemp = cr(ir, m)*(1.d0-s) + cr(ir+1, m)*s
+    end function crtemp
+
+    function srtemp(r)
+      COOP_REAL::r, srtemp
+      COOP_INT::ir
+      COOP_REAL::s
+      ir = min(floor(r), n-1)
+      s = r - ir
+      srtemp = sr(ir, m)*(1.d0-s) + sr(ir+1, m)*s
+    end function srtemp
+    
+  end subroutine coop_2D_radial_decompose
+
+
+  
 end module coop_hankel_mod
 
 

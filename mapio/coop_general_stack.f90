@@ -470,9 +470,10 @@ contains
     type(coop_healpix_patch)::patch
     COOP_STRING::fmt, map, mask, field, output, label1, label2, unit, peaks
     COOP_REAL::r_degree, dr, radius, zmin1, zmin2, zmax1, zmax2, fwhm_in, fwhm_pre
-    COOP_INT::n, i, m
+    COOP_INT::n, i, m, mmax, imap
     type(coop_asy)::fig
     logical::use_degree
+    COOP_REAL,dimension(:,:),allocatable::cr, sr, ck, sk
     call coop_load_dictionary(inifile, params)
     call coop_dictionary_lookup(params, "format", fmt, "HEALPIX")
     call coop_dictionary_lookup(params, "map", map)
@@ -485,6 +486,12 @@ contains
     call coop_dictionary_lookup(params, 'radius', r_degree, 2.d0)
     radius = r_degree * coop_SI_degree
     call coop_dictionary_lookup(params, 'res', n, 80)
+    call coop_dictionary_lookup(params, 'mmax', mmax, 4)
+    if(mmax .gt. 10)then
+       write(*,*) "Warning: COOP only does Hankel Transform up to m = 10"
+       mmax = 10
+    endif
+    allocate(cr(1:n, 0:mmax), sr(1:n, 0:mmax), ck(1:n, 1:mmax), sk(1:n, 0:mmax))
     if(use_degree)then
        dr = radius/n
     else
@@ -566,35 +573,33 @@ contains
        enddo
     end if
     call patch%export(trim(adjustl(output))//".patch")
-    call patch%get_all_radial_profiles()
+
+
+!!$    call patch%get_all_radial_profiles()
     select case(patch%nmaps)
     case(1)
-       do m = 0, patch%mmax, 2
-          call fig%open(trim(adjustl(output))//"_m"//COOP_STR_OF(m)//".txt")
-          call fig%init(xlabel="$r$", ylabel="radial profile")
-          call coop_asy_curve(fig, patch%r, patch%fr(:, m/2, 1))
-          call fig%close()
-          call fig%open(trim(adjustl(output))//"_m"//COOP_STR_OF(m)//".dat")
-          do i=0, patch%n
-             write(fig%unit, "(2E14.5)") patch%r(i), patch%fr(i, m/2, 1)
+       call coop_2D_radial_decompose(n, patch%image(:,:, 1), mmax, Cr, Sr, Ck, Sk)
+       do m=0, mmax
+          call fig%open(trim(adjustl(output))//"_HankelTransform_m"//COOP_STR_OF(m)//".txt")
+          write(fig%unit,"(A28, E14.5)") "#center value  ",patch%image(0,0,1)
+          write(fig%unit,"(5A14)") "# r  ", "C_"//COOP_STR_OF(m)//"(r)", "S_"//COOP_STR_OF(m)//"(r)", "C_"//COOP_STR_OF(m)//"(k)", "S_"//COOP_STR_OF(m)//"(k)"
+          do i=1, patch%n
+             write(fig%unit, "(5E14.5)") patch%r(i), Cr(i, m), Sr(i, m), Ck(i, m), Sk(i, m)
           enddo
-          call fig%close()        
+          call fig%close()
        enddo
     case(2)
-       do m = 0, patch%mmax, 2
-          call fig%open(trim(adjustl(output))//"_m"//COOP_STR_OF(m)//".txt")
-          call fig%init(xlabel="$r$", ylabel="radial profile")
-          if(m.ne.0)then
-             call coop_asy_curve(fig, patch%r, (patch%fr(:, m/2, 1)+patch%fr(:, m/2, 2))/2.d0)
-          else
-             call coop_asy_curve(fig, patch%r, patch%fr(:, m/2, 1) )
-          endif
-          call fig%close()
-          call fig%open(trim(adjustl(output))//"_m"//COOP_STR_OF(m)//".dat")
-          do i=0, patch%n
-             write(fig%unit, "(3E14.5)") patch%r(i), patch%fr(i, m/2, :)
+       do imap = 1, patch%nmaps
+          call coop_2D_radial_decompose(n, patch%image(:,:, imap), mmax, Cr, Sr, Ck, Sk)
+          do m=0, mmax
+             call fig%open(trim(adjustl(output))//"_map"//COOP_STR_OF(imap)//"_HankelTransform_m"//COOP_STR_OF(m)//".txt")
+             write(fig%unit,"(A28, E14.5)") "#center value  ",patch%image(0,0,imap)             
+             write(fig%unit,"(5A14)") "# r  ", "C_"//COOP_STR_OF(m)//"(r)", "S_"//COOP_STR_OF(m)//"(r)", "C_"//COOP_STR_OF(m)//"(k)", "S_"//COOP_STR_OF(m)//"(k)"
+             do i=1, patch%n
+                write(fig%unit, "(5E14.5)") patch%r(i), Cr(i, m), Sr(i, m), Ck(i, m), Sk(i, m)
+             enddo
+             call fig%close()
           enddo
-          call fig%close()        
        enddo
     end select
 
