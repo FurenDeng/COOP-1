@@ -187,7 +187,7 @@ contains
        do m=0, mmax
           call hankel%init(m)
           do i=1, n
-             l = dble(i)
+             l = dble(i)/n
              Ck(i,m) = hankel%integrate(crtemp, l)
              if(m.ne.0)Sk(i, m)= hankel%integrate(srtemp, l)
           enddo
@@ -199,18 +199,26 @@ contains
       COOP_REAL::r, crtemp
       COOP_INT::ir
       COOP_REAL::s
-      ir = min(floor(r), n-1)
-      s = r - ir
-      crtemp = cr(ir, m)*(1.d0-s) + cr(ir+1, m)*s
+      ir = floor(r)
+      if(ir .lt. n)then
+         s = r - ir
+         crtemp = cr(ir, m)*(1.d0-s) + cr(ir+1, m)*s - cr(n, m)
+      else
+         crtemp = 0.d0
+      endif
     end function crtemp
 
     function srtemp(r)
       COOP_REAL::r, srtemp
       COOP_INT::ir
       COOP_REAL::s
-      ir = min(floor(r), n-1)
-      s = r - ir
-      srtemp = sr(ir, m)*(1.d0-s) + sr(ir+1, m)*s
+      ir = floor(r)      
+      if(ir .lt. n)then
+         s = r - ir
+         srtemp = sr(ir, m)*(1.d0-s) + sr(ir+1, m)*s - sr(n, m)
+      else
+         srtemp = 0.d0
+      endif
     end function srtemp
     
   end subroutine coop_2D_radial_decompose

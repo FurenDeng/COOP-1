@@ -471,8 +471,9 @@ contains
     COOP_STRING::fmt, map, mask, field, output, label1, label2, unit, peaks
     COOP_REAL::r_degree, dr, radius, zmin1, zmin2, zmax1, zmax2, fwhm_in, fwhm_pre
     COOP_INT::n, i, m, mmax, imap
+    COOP_REAL::summask
     type(coop_asy)::fig
-    logical::use_degree
+    logical::use_degree, subtract_mean, take_log
     COOP_REAL,dimension(:,:),allocatable::cr, sr, ck, sk
     call coop_load_dictionary(inifile, params)
     call coop_dictionary_lookup(params, "format", fmt, "HEALPIX")
@@ -487,11 +488,14 @@ contains
     radius = r_degree * coop_SI_degree
     call coop_dictionary_lookup(params, 'res', n, 80)
     call coop_dictionary_lookup(params, 'mmax', mmax, 4)
+    call coop_dictionary_lookup(params, 'subtract_mean', subtract_mean, .false.)
+    call coop_dictionary_lookup(params, 'take_log', take_log, .false.)    
     if(mmax .gt. 10)then
        write(*,*) "Warning: COOP only does Hankel Transform up to m = 10"
        mmax = 10
     endif
-    allocate(cr(1:n, 0:mmax), sr(1:n, 0:mmax), ck(1:n, 0:mmax), sk(1:n, 0:mmax))
+    if(mmax .ge. 0) &
+         allocate(cr(1:n, 0:mmax), sr(1:n, 0:mmax), ck(1:n, 0:mmax), sk(1:n, 0:mmax))
     if(use_degree)then
        dr = radius/n
     else
@@ -512,10 +516,10 @@ contains
     patch%tbs%zmax(1) = zmax1
     patch%tbs%label(1) = trim(label1)          
     if(patch%nmaps.ge.2)then
-        patch%tbs%label(2) = trim(label2)
-        patch%tbs%zmin(2) = zmin2          
-        patch%tbs%zmax(2) = zmax2          
-     endif
+       patch%tbs%label(2) = trim(label2)
+       patch%tbs%zmin(2) = zmin2          
+       patch%tbs%zmax(2) = zmax2          
+    endif
     
     call coop_dictionary_lookup(params, "colortable", patch%color_table, "Rainbow")
     call coop_dictionary_lookup(params, "unit", unit, "radian")
@@ -524,34 +528,46 @@ contains
     call coop_dictionary_lookup(params, 'width', coop_healpix_patch_default_figure_width, 5.)
     call coop_dictionary_lookup(params, 'height', coop_healpix_patch_default_figure_height, 4.2)
     call sto%import(peaks)
-    write(*,*) "Stacking on  "//COOP_STR_OF(sto%peak_pix%n)//" points"
     call coop_dictionary_lookup(params, "caption", patch%caption,   "stacked on  "//COOP_STR_OF(sto%peak_pix%n)//" points")
     if(trim(patch%caption).eq. "NONE") patch%caption = ""
     fwhm_pre = max(fwhm_pre, dr/COOP_SI_arcmin)
     select case(trim(fmt))
     case("HEALPIX")
        call hmap%read(map)
-       if(fwhm_in .lt. fwhm_pre * 0.99)then !!do proper smoothing before stacking
-          call hmap%smooth(fwhm = sqrt(fwhm_pre**2 - fwhm_in**2)*coop_SI_arcmin)
-          
-       endif
-          
-       if(trim(mask) .ne. "")then
+       select case(trim(mask))
+       case("")
+          call hmask%init(nside = hmap%nside, nmaps = 1, genre = "MASK")
+          hmask%map = 1.
+       case("AUTOMATIC")
+          write(*,*) "loading mask "//trim(coop_file_add_postfix(map, "_AUTOMASK"))
+          call hmask%read(trim(coop_file_add_postfix(map, "_AUTOMASK")), nmaps_wanted = 1)
+          if(hmask%nside .ne. hmap%nside) call coop_return_error("nside of mask and map must be the same")                    
+       case default
+          write(*,*) "loading mask "//trim(mask)
           call hmask%read(mask, nmaps_wanted = 1)
-          if(hmask%nside .ne. hmap%nside) call coop_return_error("nside of mask and map must be the same")
-       else
-          if(coop_file_exists(trim(coop_file_add_postfix(map, "_AUTOMASK"))))then
-
-             call hmask%read(trim(coop_file_add_postfix(map, "_AUTOMASK")), nmaps_wanted = 1)
-             if(hmask%nside .ne. hmap%nside)then
-                call hmask%init(nside = hmap%nside, nmaps = 1, genre = "MASK")
-                hmask%map = 1.
-             endif
-          else
-             call hmask%init(nside = hmap%nside, nmaps = 1, genre = "MASK")
-             hmask%map = 1.
-          endif
+          if(hmask%nside .ne. hmap%nside) call coop_return_error("nside of mask and map must be the same")          
+       end select
+       if(take_log)then
+          write(*,*) "taking logarithm of the map"
+          do imap = 1, hmap%nmaps
+             where (hmap%map(:,imap).gt. 0.)
+                hmap%map(:,imap) = log(hmap%map(:,imap))
+             end where
+          enddo
        endif
+       if(subtract_mean)then
+          write(*,*) "subtracting mean"          
+          summask = sum(dble(hmask%map(:,1)))
+          do imap = 1, hmap%nmaps
+             where(hmask%map(:,1).gt.0.5)
+                hmap%map(:,imap) = hmap%map(:, imap) - sum(hmap%map(:,imap)*hmask%map(:,1))/summask
+             end where
+          enddo
+       end if
+       if(fwhm_in .lt. fwhm_pre * 0.99)then !!do proper smoothing before stacking
+          call hmap%smooth(fwhm = sqrt(fwhm_pre**2 - fwhm_in**2)*coop_SI_arcmin)          
+       endif
+       write(*,*) "Stacking on  "//COOP_STR_OF(sto%peak_pix%n)//" points"       
        call hmap%stack_on_peaks(sto, patch, hmask)
     case("RA-DEC")
        stop "format RA-DEC has not been implemented yet"
@@ -572,38 +588,41 @@ contains
           write(*,*) "stacked image data saved in "//trim(adjustl(output))//"_"//COOP_STR_OF(i)//".fits"           
        enddo
     end if
+
     call patch%export(trim(adjustl(output))//".patch")
 
 
 !!$    call patch%get_all_radial_profiles()
-    select case(patch%nmaps)
-    case(1)
-       call coop_2D_radial_decompose(n, patch%image(:,:, 1), mmax, Cr, Sr, Ck, Sk)
-       do m=0, mmax
-          call fig%open(trim(adjustl(output))//"_HankelTransform_m"//COOP_STR_OF(m)//".txt")
-          write(fig%unit,"(A28, E14.5)") "#center value  ",patch%image(0,0,1)
-          write(fig%unit,"(5A14)") "# r  ", "C_"//COOP_STR_OF(m)//"(r)", "S_"//COOP_STR_OF(m)//"(r)", "C_"//COOP_STR_OF(m)//"(k)", "S_"//COOP_STR_OF(m)//"(k)"
-          do i=1, patch%n
-             write(fig%unit, "(5E14.5)") patch%r(i), Cr(i, m), Sr(i, m), Ck(i, m), Sk(i, m)
-          enddo
-          call fig%close()
-       enddo
-    case(2)
-       do imap = 1, patch%nmaps
-          call coop_2D_radial_decompose(n, patch%image(:,:, imap), mmax, Cr, Sr, Ck, Sk)
+    if(mmax .ge. 0)then
+       write(*,*) "doing Hankel transform"
+       select case(patch%nmaps)
+       case(1)
+          call coop_2D_radial_decompose(n, patch%image(:,:, 1), mmax, Cr, Sr, Ck, Sk)
           do m=0, mmax
-             call fig%open(trim(adjustl(output))//"_map"//COOP_STR_OF(imap)//"_HankelTransform_m"//COOP_STR_OF(m)//".txt")
-             write(fig%unit,"(A28, E14.5)") "#center value  ",patch%image(0,0,imap)             
+             call fig%open(trim(adjustl(output))//"_HankelTransform_m"//COOP_STR_OF(m)//".txt")
+             write(fig%unit,"(A28, E14.5)") "#center value  ",patch%image(0,0,1)
              write(fig%unit,"(5A14)") "# r  ", "C_"//COOP_STR_OF(m)//"(r)", "S_"//COOP_STR_OF(m)//"(r)", "C_"//COOP_STR_OF(m)//"(k)", "S_"//COOP_STR_OF(m)//"(k)"
              do i=1, patch%n
                 write(fig%unit, "(5E14.5)") patch%r(i), Cr(i, m), Sr(i, m), Ck(i, m), Sk(i, m)
              enddo
              call fig%close()
           enddo
-       enddo
-    end select
+       case(2)
+          do imap = 1, patch%nmaps
+             call coop_2D_radial_decompose(n, patch%image(:,:, imap), mmax, Cr, Sr, Ck, Sk)
+             do m=0, mmax
+                call fig%open(trim(adjustl(output))//"_map"//COOP_STR_OF(imap)//"_HankelTransform_m"//COOP_STR_OF(m)//".txt")
+                write(fig%unit,"(A28, E14.5)") "#center value  ",patch%image(0,0,imap)             
+                write(fig%unit,"(5A14)") "# r  ", "C_"//COOP_STR_OF(m)//"(r)", "S_"//COOP_STR_OF(m)//"(r)", "C_"//COOP_STR_OF(m)//"(k)", "S_"//COOP_STR_OF(m)//"(k)"
+                do i=1, patch%n
+                   write(fig%unit, "(5E14.5)") patch%r(i), Cr(i, m), Sr(i, m), Ck(i, m), Sk(i, m)
+                enddo
+                call fig%close()
+             enddo
+          enddo
+       end select
 
-    
+    end if
   end subroutine coop_do_general_stack
   
 end module coop_gstack_mod

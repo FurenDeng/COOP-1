@@ -12,7 +12,7 @@ program Test
         f(i, j) = map(i, j)
      end do
   enddo
-  call coop_2D_radial_decompose(n, f, mmax, Cr, Sr)
+  call coop_2D_radial_decompose(n, f, mmax, Cr, Sr, Ck, Sk)
   do i=1, n
      print*, cr(i, 0), c0(dble(i))
   enddo
