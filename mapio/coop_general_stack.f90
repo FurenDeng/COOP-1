@@ -601,9 +601,9 @@ contains
           do m=0, mmax
              call fig%open(trim(adjustl(output))//"_HankelTransform_m"//COOP_STR_OF(m)//".txt")
              write(fig%unit,"(A28, E14.5)") "#center value  ",patch%image(0,0,1)
-             write(fig%unit,"(5A14)") "# r  ", "C_"//COOP_STR_OF(m)//"(r)", "S_"//COOP_STR_OF(m)//"(r)", "C_"//COOP_STR_OF(m)//"(k)", "S_"//COOP_STR_OF(m)//"(k)"
+             write(fig%unit,"(6A14)") "# r  ", "C_"//COOP_STR_OF(m)//"(r)", "S_"//COOP_STR_OF(m)//"(r)", " l ", "C_"//COOP_STR_OF(m)//"(l)", "S_"//COOP_STR_OF(m)//"(l)"
              do i=1, patch%n
-                write(fig%unit, "(5E14.5)") patch%r(i), Cr(i, m), Sr(i, m), Ck(i, m), Sk(i, m)
+                write(fig%unit, "(6E14.5)") i*dr, Cr(i, m), Sr(i, m), i/(patch%n*dr), Ck(i, m)*dr**2, Sk(i, m)*dr**2
              enddo
              call fig%close()
           enddo
@@ -613,9 +613,9 @@ contains
              do m=0, mmax
                 call fig%open(trim(adjustl(output))//"_map"//COOP_STR_OF(imap)//"_HankelTransform_m"//COOP_STR_OF(m)//".txt")
                 write(fig%unit,"(A28, E14.5)") "#center value  ",patch%image(0,0,imap)             
-                write(fig%unit,"(5A14)") "# r  ", "C_"//COOP_STR_OF(m)//"(r)", "S_"//COOP_STR_OF(m)//"(r)", "C_"//COOP_STR_OF(m)//"(k)", "S_"//COOP_STR_OF(m)//"(k)"
+                write(fig%unit,"(6A14)") "# r  ", "C_"//COOP_STR_OF(m)//"(r)", "S_"//COOP_STR_OF(m)//"(r)",  " l ", "C_"//COOP_STR_OF(m)//"(l)", "S_"//COOP_STR_OF(m)//"(l)"
                 do i=1, patch%n
-                   write(fig%unit, "(5E14.5)") patch%r(i), Cr(i, m), Sr(i, m), Ck(i, m), Sk(i, m)
+                   write(fig%unit, "(6E14.5)") i*dr, Cr(i, m), Sr(i, m), i/(patch%n*dr), Ck(i, m)*dr**2, Sk(i, m)*dr**2                   
                 enddo
                 call fig%close()
              enddo
