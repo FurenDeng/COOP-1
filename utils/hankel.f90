@@ -11,7 +11,9 @@ module coop_hankel_mod
 #include "constants.h"
 
   private
-  
+
+#define BESSEL_J coop_bessj  
+!! change to besjn for compilers that support besjn
 #include "jmaxmin.h"
 #include "jzeros.h"  
 
@@ -89,11 +91,11 @@ contains
       COOP_INT, parameter::n = 101
       x = a
       dx = (b-a)/n
-      weight  = (sqrt(a)*besjn(m, a) + sqrt(b)*besjn(m,b))/2.d0
-      wx = sqrt(b)*besjn(m,b)*(b-a)/2.d0
+      weight  = (sqrt(a)*BESSEL_J(m, a) + sqrt(b)*BESSEL_J(m,b))/2.d0
+      wx = sqrt(b)*BESSEL_J(m,b)*(b-a)/2.d0
       do i = 1, n-1
          x = x+ dx
-         val = sqrt(x)*besjn(m, x)
+         val = sqrt(x)*BESSEL_J(m, x)
          weight  = weight + val
          wx = wx + val*(x-a)
       end do
