@@ -2822,12 +2822,12 @@ contains
 #else
     stop "you need to install Healpix"
 #endif
-  contains
-    
-    function interp_value(theta, phi, radius) result(val)
-      COOP_REAL::theta, phi, radius, val
-      COOP_INT::hpix
-    end function interp_value
+!!$  contains
+!!$    
+!!$    function interp_value(theta, phi, radius) result(val)
+!!$      COOP_REAL::theta, phi, radius, val
+!!$      COOP_INT::hpix
+!!$    end function interp_value
     
   end subroutine coop_fits_image_cea_convert2healpix
 
