@@ -64,10 +64,9 @@ contains
     COOP_COSMO%r =  COOP_AMP_RATIO
     COOP_COSMO%nt = COOP_NT
     COOP_COSMO%inflation_consistency = COOP_INFLATION_CONSISTENCY
-
     if(present(h))then
        if(present(want_firstorder))then
-          call coop_setup_global_cosmology_with_h(COOP_REAL_OF(h), want_firstorder = want_firstorder)          
+          call coop_setup_global_cosmology_with_h(COOP_REAL_OF(h), want_firstorder = want_firstorder)
        else
           call coop_setup_global_cosmology_with_h(COOP_REAL_OF(h))
        endif
