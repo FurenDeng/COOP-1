@@ -51,6 +51,7 @@ contains
     COOP_SINGLE::thetaphi(0:2)
     COOP_INT::nside
     type(coop_list_realarr)::el
+#if HAS_HEALPIX    
     call this%free()
     call coop_load_dictionary(inifile, this%header)
     call coop_dictionary_lookup(this%header, "format", this%fmt, "HEALPIX")
@@ -436,7 +437,9 @@ contains
          lpower = 0.
       end select
     end subroutine option2lpower
-    
+#else
+    stop "To do stacking you must compile COOP with healpix."
+#endif    
   end subroutine coop_general_stack_points_init
 
 
@@ -474,6 +477,7 @@ contains
     COOP_REAL::summask
     type(coop_asy)::fig
     logical::use_degree, subtract_mean, take_log
+#if HAS_HEALPIX    
     COOP_REAL,dimension(:,:),allocatable::cr, sr, ck, sk
     call coop_load_dictionary(inifile, params)
     call coop_dictionary_lookup(params, "format", fmt, "HEALPIX")
@@ -623,6 +627,9 @@ contains
        end select
 
     end if
+#else
+    stop "To do stacking you must compile COOP with healpix."
+#endif    
   end subroutine coop_do_general_stack
   
 end module coop_gstack_mod
