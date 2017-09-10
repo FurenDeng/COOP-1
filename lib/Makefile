@@ -10,7 +10,7 @@ FORECAST=../forecast
 include ../configure.in
 include ../compile_rules.in
 LIB = libcoopwrapper.a
-OBJ = wrapper.o 
+OBJ = cambpp.o wrapper.o 
 
 
 default: $(LIB)
