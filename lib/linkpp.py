@@ -285,7 +285,7 @@ list_param_replace = [r'module CosmologyParameterizations\n use camb_mypp', \
                       r'this%H0_min = 55.', \
                       r'this%H0_max = 85. \n call Ini%read("use_max_zre", this%use_max_zre)', \
                       r'call this%SetTheoryParameterNumbers('+str(numhard)+', last_power_index + mypp_nknots)', \
-                      r'call setfast(params, CMB)\n call mypp_setup_pp(As=exp(params('+str(index_logA)+'))*1.d-10, ns=params('+str(index_ns)+'), r = params('+str(index_r)+'), nknots = mypp_nknots, dlnps = params(last_power_index+1:last_power_index+mypp_nknots))', \
+                      r'call setfast(params, CMB)\n call mypp_setup_pp(As=exp(params('+str(index_logA)+'))*1.d-10, ns=params('+str(index_ns)+'), r = params('+str(index_r)+'), nknots = mypp_nknots, dlnps = params('+str(numhard)+' + last_power_index+1:'+str(numhard)+' +last_power_index+mypp_nknots))', \
                       r"adjustl(trim(cosmomc_paramnames))", \
                       r'\1\n real(mcp)::use_max_zre = 20.', \
                       r' if (CMB%zre < this%Use_min_zre .or. CMB%zre > this%use_max_zre) return \n ']
