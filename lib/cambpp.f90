@@ -11,8 +11,9 @@ module camb_mypp
   integer::mypp_ipivot = 0  
   real*8,parameter::mypp_lnkpiv = log(mypp_kpiv)
   real*8,parameter::mypp_lnkmin = -9.22d0
+  real*8::mypp_lnk_per_knot = 0.d0
   real*8::mypp_lnkmax = -0.3d0
-  integer::mypp_model = 0
+  integer::mypp_model = 0, mypp_nleft = 0, mypp_nright = 0
   real*8,dimension(mypp_n)::mypp_lnk, mypp_lnps, mypp_lnps2, mypp_lnpt, mypp_lnpt2, mypp_lneps, mypp_lnV, mypp_phi, mypp_lnH
 
 !!  character(LEN=1024)::cosmomc_paramnames = ''
@@ -184,18 +185,19 @@ contains
     real*8::dlnps(nknots)
     real*8  dlnk
     real*8,dimension(:),allocatable::lnk, lnps, lnps2
-    integer  nleft, nright, i
+    integer  i
     if(nknots .lt. 5) stop "You need at least 5 knots for scan_spline mode"
     mypp_nknots = nknots
-    nleft = nint(nknots* (mypp_lnkpiv-mypp_lnkmin) / (-mypp_lnkmin))
-    nright = nknots - nleft 
-    dlnk = (mypp_lnkpiv-mypp_lnkmin)/nleft
+    mypp_nleft = nint(nknots* (mypp_lnkpiv-mypp_lnkmin) / (-mypp_lnkmin))
+    mypp_nright = nknots - mypp_nleft 
+    dlnk = (mypp_lnkpiv-mypp_lnkmin)/mypp_nleft
+    mypp_lnk_per_knot = dlnk
     mypp_lnkmax = mypp_lnkmin + nknots * dlnk
     allocate(lnk(0:nknots), lnps(0:nknots), lnps2(0:nknots))
     call mypp_set_uniform(nknots+1, lnk, mypp_lnkmin, mypp_lnkmax)
-    lnps(0:nleft-1) = dlnps(1:nleft)
-    lnps(nleft) = 0.d0
-    lnps(nleft+1:nknots) = dlnps(nleft+1:nknots)
+    lnps(0:mypp_nleft-1) = dlnps(1:mypp_nleft)
+    lnps(mypp_nleft) = 0.d0
+    lnps(mypp_nleft+1:nknots) = dlnps(mypp_nleft+1:nknots)
     call mypp_spline(nknots+1, lnk, lnps, lnps2)
 
     call mypp_set_uniform(mypp_n, mypp_lnk, mypp_lnkmin, mypp_lnkmax)        

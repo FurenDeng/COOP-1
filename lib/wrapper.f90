@@ -1,5 +1,6 @@
 module coop_wrapper
   use coop_wrapper_firstorder
+  use camb_mypp
   implicit none
 #include "constants.h"
 

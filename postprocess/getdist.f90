@@ -12,7 +12,6 @@ program getdist
   type(coop_list_string) sl
   type(coop_list_integer) pcal
   integer i, j, ip1,ip2, if1, if2
-  call coop_MPI_init()
   call coop_random_init()
   fini = coop_InputArgs(1)
   if(fini(len_trim(fini)-3:len_trim(fini)).ne.".ini")then
@@ -25,6 +24,8 @@ program getdist
   endif
   prefix = ini_read_string("root", .false.)
   mc%do_preprocess = ini_read_logical("preprocess", .false.)
+  mc%do_extensions = ini_read_logical("do_extensions", .false.)
+  if(mc%do_extensions) write(*,*) "doing extensions"
   if(trim(prefix).eq."") stop "You need to specify the key 'root' in ini file"
   if(trim(Coop_InputArgs(2)).ne."")then
      prefix = trim(adjustl(coop_file_path_of(prefix)))//trim(adjustl(coop_inputArgs(2)))
@@ -117,7 +118,7 @@ program getdist
      write(*,*) "Doing PCA for "//trim(inline)
   endif
   call mc%export_stats(outdir)
-  call coop_MPI_Finalize()
+
 end program getdist
 
 
