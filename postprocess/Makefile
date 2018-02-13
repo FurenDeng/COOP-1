@@ -19,5 +19,9 @@ GD: 	$(OBJ) getdist.o
 	$(FC) $(FFLAGS) $(INCLUDE) -o $@ $(OBJ) getdist.o $(LINK)
 
 
+MergeChains: 	$(OBJ) merge_chains.o
+	$(FC) $(FFLAGS) $(INCLUDE) -o $@ $(OBJ) merge_chains.o $(LINK)
+
+
 clean:
 	rm -f *.o *.*~ *.mod \#* *.a Makefile~ Test GD

@@ -24,16 +24,18 @@ module coop_statchains_mod
      logical::do_preprocess = .false.
      COOP_INT::np_used = 0
      COOP_INT::np = 0
+     COOP_INT::nprim = 0
      COOP_SINGLE:: bestlike, worstlike, totalmult, likecut(mcmc_stat_num_cls)
      COOP_INT ibest, iworst
      COOP_SHORT_STRING,dimension(:),allocatable::name, simplename
+     logical,dimension(:),allocatable::derived
      COOP_STRING,dimension(:),allocatable::label
      COOP_SINGLE,dimension(:),allocatable::lower, upper, mean, std, plotlower, plotupper, dx, base !!plotlower and plotupper are used to make plots, with ~0 long tail truncated
      COOP_SINGLE,dimension(:,:),allocatable::lowsig, upsig
      logical,dimension(:),allocatable::vary, left_is_tail, right_is_tail
      COOP_INT,dimension(:),allocatable::map2used
-     COOP_SINGLE,dimension(:,:),allocatable::covmat, corrmat, cov_used
-     COOP_INT,dimension(:),allocatable::used
+     COOP_SINGLE,dimension(:,:),allocatable::covmat, corrmat
+     COOP_INT,dimension(:),allocatable::used, prim  !!used(i): full-index of the i-th used parameter;  prim(i): used-index of the i-th used primary parameter
 
 
      COOP_INT np_pca
@@ -153,8 +155,8 @@ contains
           if(nfiles.eq.1)then
              mc%np = coop_file_numcolumns(fname) -2 
              call coop_feedback(trim(coop_num2str(mc%np))//" parameters")
-             if(allocated(mc%label))deallocate(mc%name, mc%simplename, mc%label, mc%std, mc%mean, mc%lower, mc%upper, mc%vary, mc%covmat,  mc%plotlower, mc%plotupper, mc%dx, mc%map2used, mc%lowsig, mc%upsig, mc%left_is_tail, mc%right_is_tail, mc%base)
-             allocate(mc%label(mc%np), mc%simplename(mc%np), mc%std(mc%np), mc%mean(mc%np), mc%lower(mc%np), mc%upper(mc%np),  mc%plotlower(mc%np), mc%plotupper(mc%np), mc%vary(mc%np), mc%covmat(mc%np, mc%np), mc%dx(mc%np), mc%map2used(mc%np), mc%name(mc%np), mc%lowsig(mcmc_stat_num_cls, mc%np), mc%upsig(mcmc_stat_num_cls, mc%np), mc%left_is_tail(mc%np), mc%right_is_tail(mc%np), mc%base(mc%np))
+             if(allocated(mc%label))deallocate(mc%name, mc%derived, mc%simplename, mc%label, mc%std, mc%mean, mc%lower, mc%upper, mc%vary,  mc%plotlower, mc%plotupper, mc%dx, mc%map2used, mc%lowsig, mc%upsig, mc%left_is_tail, mc%right_is_tail, mc%base, mc%covmat)
+             allocate(mc%label(mc%np), mc%simplename(mc%np), mc%std(mc%np), mc%mean(mc%np), mc%lower(mc%np), mc%upper(mc%np), mc%covmat(mc%np, mc%np), mc%plotlower(mc%np), mc%plotupper(mc%np), mc%vary(mc%np), mc%dx(mc%np), mc%map2used(mc%np), mc%name(mc%np),mc%derived(mc%np), mc%lowsig(mcmc_stat_num_cls, mc%np), mc%upsig(mcmc_stat_num_cls, mc%np), mc%left_is_tail(mc%np), mc%right_is_tail(mc%np), mc%base(mc%np))
           endif
        else
           exit
@@ -193,14 +195,17 @@ contains
              if(lens .eq. 0)then
                 mc%name(i) = "param"//trim(coop_num2str(i))
                 mc%label(i) = mc%name(i)
+                mc%derived(i) = .false.                
              else
                 ispace = scan(inline,  " "//coop_tab)
                 if(ispace .eq. 0)then
                    mc%name(i) = trim(inline)
+                   mc%derived(i) = .false.                                   
                    if(trim(mc%name(i)) .eq. "") mc%name(i) = "param"//trim(coop_num2str(i))
                    mc%label(i) = mc%name(i)
                 else
                    mc%name(i) = trim(inline(1:ispace-1))
+                   mc%derived(i) = (inline(ispace-1:ispace-1) .eq. "*")
                    mc%label(i) = "$"//trim(adjustl(inline(ispace+1:)))//"$"
                    if(trim(mc%label(i)).eq. "$$") mc%label(i) = mc%name(i)
                 endif
@@ -208,6 +213,7 @@ contains
           else
              mc%name(i) = "param"//trim(coop_num2str(i))
              mc%label(i) = mc%name(i)
+             mc%derived(i) = .false.                             
           endif
 
        enddo
@@ -437,33 +443,37 @@ contains
 
     enddo
     mc%np_used = count(mc%vary)
+    mc%nprim = count(mc%vary .and. .not. mc%derived)
+    if(allocated(mc%prim))deallocate(mc%prim)
     mc%np_pca = 0 !!default
     if(allocated(mc%used))deallocate(mc%used)
-    if(allocated(mc%corrmat))deallocate(mc%corrmat, mc%cov_used)
-    allocate(mc%used(mc%np_used), mc%corrmat(mc%np_used, mc%np_used), mc%cov_used(mc%np_used, mc%np_used))
+    if(allocated(mc%corrmat))deallocate(mc%corrmat)
+    allocate(mc%used(mc%np_used), mc%corrmat(mc%np_used, mc%np_used), mc%prim(mc%nprim))
     i = 1
+    j=1
     do ip=1, mc%np
        if(mc%vary(ip))then
           mc%used(i) = ip
           mc%map2used(ip) = i
-          i = i +1
+          i = i +1                    
+          if(.not. mc%derived(ip))then
+             mc%prim(j) = ip  
+             j = j +1
+          endif
        else
           mc%map2used(ip) = 0
        endif
     enddo
-    mc%covmat = 0.
+    mc%covmat = 0.d0
     do i=1, mc%np_used
        do j= 1, i-1
-          mc%cov_used(i, j)  = sum((mc%params(:, mc%used(i))-mc%mean(mc%used(i)))*(mc%params(:, mc%used(j))-mc%mean(mc%used(j)))*mc%mult)/mc%totalmult
-          mc%cov_used(j, i) = mc%cov_used(i, j)
-          mc%covmat(mc%used(i), mc%used(j)) = mc%cov_used(i, j) 
-          mc%covmat(mc%used(j),mc%used(i)) =  mc%cov_used(i, j) 
-          mc%corrmat(i, j) = mc%cov_used(i, j) / (mc%std(mc%used(i))*mc%std(mc%used(j)))
+          mc%covmat(mc%used(i), mc%used(j))  = sum((mc%params(:, mc%used(i))-mc%mean(mc%used(i)))*(mc%params(:, mc%used(j))-mc%mean(mc%used(j)))*mc%mult)/mc%totalmult
+          mc%covmat(mc%used(j), mc%used(i)) = mc%covmat(mc%used(i), mc%used(j))
+          mc%corrmat(i, j) =  mc%covmat(mc%used(i), mc%used(j))/ (mc%std(mc%used(i))*mc%std(mc%used(j)))
           mc%corrmat(j, i) = mc%corrmat(i, j)
        enddo
-       mc%cov_used(i, i) = mc%std(mc%used(i))**2
+       mc%covmat(mc%used(i), mc%used(i)) = mc%std(mc%used(i))**2
        mc%corrmat(i, i) =  1.
-       mc%covmat(mc%used(i), mc%used(i)) =  mc%cov_used(i, i) 
     enddo
     if(coop_postprocess_nbins .gt. 0)then
        mc%nb = coop_postprocess_nbins 
@@ -898,6 +908,15 @@ contains
     end select
     call fp%close()
 
+
+!!_good.ini    
+    call fp%open(trim(mc%output)//"_good.ini", "w")
+    do i = 1, mc%np
+       if(.not. mc%derived(i) .and. mc%vary(i))then
+          write(fp%unit, "(A, 5G16.7)") "param["//trim(mc%name(i))//"] = ",  mc%params(mc%ibest, i), max(mc%params(mc%ibest, i) - 5.*mc%std(i), mc%lower(i)), min(mc%params(mc%ibest, i)+5.*mc%std(i), mc%upper(i)), mc%std(i)*0.8, mc%std(i)*0.8
+       endif
+    enddo
+    call fp%close()
 !!tex    
     call fp%open(trim(mc%output)//".tex", "w")
     Write(fp%unit,"(A)")"\documentclass[12pt]{article}"
@@ -924,14 +943,36 @@ contains
     call fp%close()
 
     !!covmat
-    allnames = ""
-    do ip=1, mc%np_used
-       allnames = trim(allnames)//" "//trim(mc%name(mc%used(ip)))
-    enddo    
+    allnames = "# "
+    do ip=1, mc%nprim
+       allnames = trim(allnames)//" "//trim(mc%name(mc%used(mc%prim(ip))))
+    enddo
     call fp%open(trim(mc%output)//".covmat", "w")    
     write(fp%unit, "(A)") trim(allnames)
-    call coop_write_matrix(fp%unit, mc%cov_used, mc%np_used, mc%np_used)
+    call coop_write_matrix(fp%unit, mc%covmat(mc%prim, mc%prim), mc%nprim, mc%nprim)
     call fp%close()
+
+
+    !!covmat
+    allnames = "# "
+    do ip=1, mc%nprim
+       allnames = trim(allnames)//" "//trim(mc%name(mc%used(mc%prim(ip))))
+    enddo
+    call fp%open(trim(mc%output)//".scaledcov", "w")    
+    write(fp%unit, "(A)") trim(allnames)
+    call coop_write_matrix(fp%unit, mc%covmat(mc%prim, mc%prim)*0.2, mc%nprim, mc%nprim)
+    call fp%close()
+    
+    allnames = "# "
+    do ip=1, mc%np_used
+       allnames = trim(allnames)//" "//trim(mc%name(mc%used(ip)))
+    enddo
+    call fp%open(trim(mc%output)//".usedcov", "w")    
+    write(fp%unit, "(A)") trim(allnames)
+    call coop_write_matrix(fp%unit, mc%covmat(mc%used, mc%used), mc%np_used, mc%np_used)
+    call fp%close()
+
+    
     call fp%open(trim(mc%output)//".corr", "w")
     call coop_write_matrix(fp%unit, mc%corrmat, mc%np_used, mc%np_used)
     call fp%close()
@@ -946,9 +987,6 @@ contains
     enddo
     call fp%close()
 
-!!$    call fp%open(trim(mc%output)//".covused", "w")
-!!$    call coop_write_matrix(fp%unit, mc%cov_used, mc%np_used, mc%np_used)
-!!$    call fp%close()
     if(mc%np_pca .gt. 0)then
        call coop_feedback( "Doing PCA")
        allocate(pcamat(mc%np_pca, mc%np_pca),eig(mc%np_pca), ipca(mc%np_pca))
