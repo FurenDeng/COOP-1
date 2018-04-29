@@ -19,6 +19,7 @@ module coop_wrapper_utils
   use coop_sphere_mod
   use coop_fitsio_mod
   use coop_hankel_mod
+  use coop_nn_mod
   implicit none
 
 contains

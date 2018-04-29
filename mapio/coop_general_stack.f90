@@ -5,7 +5,6 @@ module coop_gstack_mod
   use coop_healpix_mod
   use coop_stacking_mod
   use coop_fitswrap_mod
-  use coop_stacking_mod
   implicit none
 
 #include "constants.h"

@@ -8,7 +8,7 @@ module coop_asy_mod
   implicit none
   private
 
-  public::coop_asy, coop_asy_path, coop_asy_error_bar, coop_asy_errorbars, coop_asy_interpolate_curve, coop_asy_gray_color, coop_asy_rgb_color, coop_asy_label, coop_asy_legend, coop_asy_legend_advance, coop_asy_dot, coop_asy_line, coop_asy_labels, coop_asy_dots, coop_asy_lines, coop_asy_contour, coop_asy_curve, coop_asy_density,  coop_asy_topaxis, coop_asy_rightaxis, coop_asy_clip, coop_asy_plot_function, coop_asy_plot_likelihood,  coop_asy_histogram, coop_asy_band,coop_asy_default_width,coop_asy_default_height, coop_asy_color2rgba, coop_asy_rgba2color
+  public::coop_asy, coop_asy_path, coop_asy_error_bar, coop_asy_errorbars, coop_asy_interpolate_curve, coop_asy_gray_color, coop_asy_rgb_color, coop_asy_label, coop_asy_legend, coop_asy_legend_advance, coop_asy_dot, coop_asy_line, coop_asy_labels, coop_asy_dots, coop_asy_lines, coop_asy_contour, coop_asy_curve, coop_asy_density,  coop_asy_topaxis, coop_asy_rightaxis, coop_asy_clip, coop_asy_plot_function, coop_asy_plot_likelihood, coop_asy_plot_GaussianFit,  coop_asy_histogram, coop_asy_band,coop_asy_default_width,coop_asy_default_height, coop_asy_color2rgba, coop_asy_rgba2color
 
 
 #include "constants.h"
@@ -158,6 +158,10 @@ module coop_asy_mod
      module procedure coop_asy_plot_likelihood_s, coop_asy_plot_likelihood_d
   end interface coop_asy_plot_likelihood
 
+  interface coop_asy_plot_GaussianFit
+     module procedure coop_asy_plot_GaussianFit_s, coop_asy_plot_GaussianFit_d
+  end interface coop_asy_plot_GaussianFit
+  
 
   interface coop_asy_density
      module procedure coop_asy_density_s, coop_asy_density_d, coop_asy_irregular_density_s, coop_asy_irregular_density_d
@@ -875,6 +879,7 @@ contains
     endif
   end subroutine coop_asy_interpolate_curve_d
 
+  
   subroutine coop_asy_plot_likelihood_d(this, xraw, yraw, color, linetype, linewidth, legend, left_tail, right_tail)
     class(coop_asy) this
     COOP_REAL ,dimension(:),intent(IN)::xraw, yraw
@@ -906,7 +911,7 @@ contains
           npt = npt+1
        endif
     endif
-100 write(this%unit, "(A)") "CURVE"
+    write(this%unit, "(A)") "CURVE"
     write(this%unit, "(I8)") npt
     if(present(legend))then
        if(trim(legend).ne."")then
@@ -951,6 +956,60 @@ contains
     endif
   end subroutine coop_asy_plot_likelihood_d
 
+
+  subroutine coop_asy_plot_GaussianFit_d(this, middle, mean, rms, skewness, lbd, ubd, color, linetype, linewidth, legend)
+    class(coop_asy) this
+    COOP_REAL mean, rms, skewness, middle, lbd, ubd
+    COOP_INT,parameter::npt = 121
+    COOP_INT::i
+    COOP_REAL:: lambda1, lambda3, sigma
+    COOP_SINGLE::x(npt), y(npt)
+    COOP_UNKNOWN_STRING,optional:: color, linetype
+    COOP_SINGLE ,optional::linewidth
+    COOP_UNKNOWN_STRING, optional::legend
+    COOP_STRING lineproperty
+
+    lambda3 = skewness / 6.d0
+    lambda1 = (mean-middle)-3.d0*lambda3
+    sigma = rms * (1.d0 + (mean-middle)**2/2.d0)
+    call coop_set_uniform(npt, x, real(lbd, sp), real(ubd,sp))
+    y = exp(-(x-middle)**2/(2.d0*sigma**2))*(1.d0+lambda1*(x-middle)/sigma + lambda3*(x-middle)**3/sigma**3)
+    y = y/maxval(y)
+    write(this%unit, "(A)") "CURVE"
+    write(this%unit, "(I8)") npt
+    if(present(legend))then
+       if(trim(legend).ne."")then
+          write(this%unit, "(A)") trim(legend)
+       else
+          write(this%unit, "(A)") "NULL"
+       endif
+    else
+       write(this%unit, "(A)") "NULL"
+    endif
+    if(present(color))then
+       lineproperty=trim(color)
+    else
+       lineproperty = "black"
+    endif
+    if(present(linetype))then
+       lineproperty = trim(lineproperty)//"_"//trim(linetype)
+    else
+       lineproperty = trim(lineproperty)//"_solid"
+    endif
+    if(present(linewidth))then
+       lineproperty = trim(lineproperty)//"_"//trim(coop_num2str(linewidth))
+    else
+       lineproperty = trim(lineproperty)//"_1.5"
+    endif
+    write(this%unit, "(A)") trim(lineproperty)
+    write(this%unit, "(A)") "0"
+    do i=1, npt
+       call this%write_coor(x(i), y(i))
+    enddo
+  end subroutine coop_asy_plot_GaussianFit_d
+
+
+    
   subroutine coop_asy_interpolate_curve_s(this, xraw, yraw, interpolate, color, linetype, linewidth, legend)
     COOP_INT ,parameter::n = 256
     COOP_REAL  x(n), y(n),  minx, maxx, dx
@@ -1187,7 +1246,7 @@ contains
           npt = npt+1
        endif
     endif
-100 write(this%unit, "(A)") "CURVE"
+    write(this%unit, "(A)") "CURVE"
     write(this%unit, "(I8)") npt
     if(present(legend))then
        if(trim(legend).ne."")then
@@ -1229,6 +1288,56 @@ contains
   end subroutine coop_asy_plot_likelihood_s
 
 
+  subroutine coop_asy_plot_GaussianFit_s(this, middle, mean, rms, skewness, lbd, ubd, color, linetype, linewidth, legend)
+    class(coop_asy) this
+    COOP_SINGLE mean, rms, skewness, middle, lbd, ubd
+    COOP_INT,parameter::npt = 121
+    COOP_INT::i
+    COOP_REAL:: lambda1, lambda3, sigma
+    COOP_SINGLE::x(npt), y(npt)
+    COOP_UNKNOWN_STRING,optional:: color, linetype
+    COOP_SINGLE ,optional::linewidth
+    COOP_UNKNOWN_STRING, optional::legend
+    COOP_STRING lineproperty
+
+    lambda3 = skewness / 6.d0
+    lambda1 = (mean-middle)-3.d0*lambda3
+    sigma = rms * (1.d0 + (mean-middle)**2/2.d0)
+    call coop_set_uniform(npt, x, lbd, ubd)
+    y = exp(-(x-middle)**2/(2.d0*sigma**2))*(1.d0+lambda1*(x-middle)/sigma + lambda3*(x-middle)**3/sigma**3)
+    y = y/maxval(y)
+    write(this%unit, "(A)") "CURVE"
+    write(this%unit, "(I8)") npt
+    if(present(legend))then
+       if(trim(legend).ne."")then
+          write(this%unit, "(A)") trim(legend)
+       else
+          write(this%unit, "(A)") "NULL"
+       endif
+    else
+       write(this%unit, "(A)") "NULL"
+    endif
+    if(present(color))then
+       lineproperty=trim(color)
+    else
+       lineproperty = "black"
+    endif
+    if(present(linetype))then
+       lineproperty = trim(lineproperty)//"_"//trim(linetype)
+    else
+       lineproperty = trim(lineproperty)//"_solid"
+    endif
+    if(present(linewidth))then
+       lineproperty = trim(lineproperty)//"_"//trim(coop_num2str(linewidth))
+    else
+       lineproperty = trim(lineproperty)//"_1.5"
+    endif
+    write(this%unit, "(A)") trim(lineproperty)
+    write(this%unit, "(A)") "0"
+    do i=1, npt
+       call this%write_coor(x(i), y(i))
+    enddo
+  end subroutine coop_asy_plot_GaussianFit_s
 
   subroutine coop_asy_plot_file(this, filename, interpolate, xcol, ycol, color, linetype, linewidth, legend, filename2)
     class(coop_asy) this

@@ -30,7 +30,7 @@ module coop_statchains_mod
      COOP_SHORT_STRING,dimension(:),allocatable::name, simplename
      logical,dimension(:),allocatable::derived
      COOP_STRING,dimension(:),allocatable::label
-     COOP_SINGLE,dimension(:),allocatable::lower, upper, mean, std, plotlower, plotupper, dx, base !!plotlower and plotupper are used to make plots, with ~0 long tail truncated
+     COOP_SINGLE,dimension(:),allocatable::lower, upper, mean, skewness, kurtosis, std, plotlower, plotupper, dx, base !!plotlower and plotupper are used to make plots, with ~0 long tail truncated
      COOP_SINGLE,dimension(:,:),allocatable::lowsig, upsig
      logical,dimension(:),allocatable::vary, left_is_tail, right_is_tail
      COOP_INT,dimension(:),allocatable::map2used
@@ -53,6 +53,8 @@ module coop_statchains_mod
      logical,dimension(:),allocatable::want_1d_output
      logical::do_extensions = .false.
      COOP_SHORT_STRING, dimension(mcmc_stat_num_cls)::color2d
+     COOP_STRING::datasets 
+     type(coop_dictionary) settings
      type(coop_dictionary) inputparams
      type(coop_dictionary) allparams
      type(coop_dictionary) usedparams
@@ -81,9 +83,12 @@ module coop_statchains_mod
      COOP_INT::index_de_dlnQdphi = 0
      COOP_INT::index_de_d2Udphi2 = 0
      COOP_INT::index_h = 0
+     COOP_INT::index_h0 = 0     
      logical::index_set = .false.
      COOP_REAL::default_ns = 0.967
      COOP_REAL::default_r = 0.
+     COOP_REAL::fit_skewness_threshold = 0.1d0
+     COOP_REAL::fit_kurtosis_threshold = 0.02d0     
    contains
      procedure:: export_stats => coop_mcmc_chain_export_stats
      procedure::load => coop_mcmc_chain_load
@@ -130,6 +135,7 @@ contains
     this%index_de_dlnQdphi = this%index_of("de_dlnQdphi")
     this%index_de_d2Udphi2 = this%index_of("de_d2Udphi2")
     this%index_h = this%index_of("h")
+    this%index_H0 = this%index_of("H0*")    
     this%index_omegam = this%index_of("omegam")
     this%index_omegab = this%index_of("omegab")    
     this%index_omegak = this%index_of("omegak")
@@ -155,8 +161,8 @@ contains
           if(nfiles.eq.1)then
              mc%np = coop_file_numcolumns(fname) -2 
              call coop_feedback(trim(coop_num2str(mc%np))//" parameters")
-             if(allocated(mc%label))deallocate(mc%name, mc%derived, mc%simplename, mc%label, mc%std, mc%mean, mc%lower, mc%upper, mc%vary,  mc%plotlower, mc%plotupper, mc%dx, mc%map2used, mc%lowsig, mc%upsig, mc%left_is_tail, mc%right_is_tail, mc%base, mc%covmat)
-             allocate(mc%label(mc%np), mc%simplename(mc%np), mc%std(mc%np), mc%mean(mc%np), mc%lower(mc%np), mc%upper(mc%np), mc%covmat(mc%np, mc%np), mc%plotlower(mc%np), mc%plotupper(mc%np), mc%vary(mc%np), mc%dx(mc%np), mc%map2used(mc%np), mc%name(mc%np),mc%derived(mc%np), mc%lowsig(mcmc_stat_num_cls, mc%np), mc%upsig(mcmc_stat_num_cls, mc%np), mc%left_is_tail(mc%np), mc%right_is_tail(mc%np), mc%base(mc%np))
+             if(allocated(mc%label))deallocate(mc%name, mc%derived, mc%simplename, mc%label, mc%std, mc%mean,mc%skewness, mc%kurtosis, mc%lower, mc%upper, mc%vary,  mc%plotlower, mc%plotupper, mc%dx, mc%map2used, mc%lowsig, mc%upsig, mc%left_is_tail, mc%right_is_tail, mc%base, mc%covmat)
+             allocate(mc%label(mc%np), mc%simplename(mc%np), mc%std(mc%np), mc%mean(mc%np), mc%skewness(mc%np),mc%kurtosis(mc%np),  mc%lower(mc%np), mc%upper(mc%np), mc%covmat(mc%np, mc%np), mc%plotlower(mc%np), mc%plotupper(mc%np), mc%vary(mc%np), mc%dx(mc%np), mc%map2used(mc%np), mc%name(mc%np),mc%derived(mc%np), mc%lowsig(mcmc_stat_num_cls, mc%np), mc%upsig(mcmc_stat_num_cls, mc%np), mc%left_is_tail(mc%np), mc%right_is_tail(mc%np), mc%base(mc%np))
           endif
        else
           exit
@@ -326,6 +332,8 @@ contains
        if (dx .lt. 1.d-13 )then
           mc%mean(ip) = mc%upper(ip)
           mc%std(ip) = 0.
+          mc%skewness(ip) = 0.
+          mc%kurtosis(ip) = 0.
           mc%vary(ip) = .false.
           mc%plotupper(ip) = mc%upper(ip)
           mc%plotlower(ip) = mc%lower(ip)
@@ -337,6 +345,8 @@ contains
        else
           mc%mean(ip) = sum(mc%params(:,ip)*mc%mult)/mc%totalmult
           mc%std(ip) = sqrt(sum((mc%params(:,ip)-mc%mean(ip))**2*mc%mult)/mc%totalmult)
+          mc%skewness(ip) = sum((mc%params(:,ip)-mc%mean(ip))**3*mc%mult)/mc%totalmult /mc%std(ip)**3
+          mc%kurtosis(ip) = sum((mc%params(:,ip)-mc%mean(ip))**4*mc%mult)/mc%totalmult/mc%std(ip)**4/3.d0 - 1.d0
           mc%vary(ip) = .true.
 
           mc%upper(ip) = mc%upper(ip) + dx/5.d0
@@ -548,7 +558,7 @@ contains
     COOP_UNKNOWN_STRING output
     COOP_SHORT_STRING::rval=""
     type(coop_file)::fcl
-    type(coop_asy) fp, fig_spec, fig_pot, fig_eps, fig_cls, fig_dcls
+    type(coop_asy) fp, fig_spec, fig_pot, fig_eps !, fig_cls, fig_dcls
     type(coop_asy_path) path    
     COOP_INT i , ip, j,  j2, k, ik, ik1,  ik2, ndof, l, junk, num_params,  pp_location, icontour, numpp, num_trajs, ind_lowk, isam, index_H, ind_highk
     COOP_SINGLE total_mult, cltraj_weight, x(mc%nb), ytop
@@ -574,8 +584,9 @@ contains
     write(fp%unit, "("//trim(coop_num2str(mc%np))//"G14.5)") mc%params(mc%ibest, :)
 
     if(mc%do_extensions)then
-       mean_lnAs = mc%mean(mc%index_of("logA"))       
+       call coop_dictionary_lookup(mc%settings, "m2phi2_logA", mean_lnAs, dble(mc%mean(mc%index_of("logA"))))
        call coop_feedback("Generating primordial power spectra trajectories")
+       write(*,*) "m^2phi^2 trajectory logA = ", mean_lnAs       
        call fig_spec%open(trim(mc%output)//"_power_trajs.txt", "w")
        call fig_pot%open(trim(mc%output)//"_potential_trajs.txt", "w")
        call fig_eps%open(trim(mc%output)//"_eps_trajs.txt", "w")
@@ -606,7 +617,7 @@ contains
 
        call fig_spec%init(xlabel="$ k [{\rm Mpc}^{-1}]$", ylabel = "$10^{10}\mathcal{P}_{{\cal R},\mathrm{t}}$", xlog=.true., ylog = .true., xmin = real(exp(mypp_lnkmin-0.08)), xmax = real(exp(mypp_lnkmax + 0.08)), ymin = 1., ymax = 250., doclip = .true.)
        call coop_asy_topaxis(fig_spec, xmin = real(exp(mypp_lnkmin-0.08))*distlss,  xmax = real(exp(mypp_lnkmax + 0.08))*distlss, islog = .true. , label = "$\ell_k\equiv  k D_{\rm rec}$")
-       call fig_pot%init(xlabel="$(\phi - \phi_{\rm pivot})/M_p$", ylabel = "$\ln (V/V_{\rm pivot})$", xmin = -0.8, xmax = 0.5, ymin = -0.08, ymax = 0.08, doclip = .true.)
+       call fig_pot%init(xlabel="$(\phi - \phi_{\rm pivot})/M_p$", ylabel = "$\ln (V/V_{\rm pivot})$", xmin = -0.8, xmax = 0.5, ymin = -0.06, ymax = 0.08, doclip = .true.)
        call fig_eps%init(xlabel = "$ k [{\rm Mpc}^{-1}]$", ylabel = "$\epsilon$", xlog = .true. ,  xmin = real(exp(mypp_lnkmin-0.08)), xmax = real(exp(mypp_lnkmax + 0.08)), ymin = -0.005, ymax = 0.03, doclip = .true.)
        call coop_asy_topaxis(fig_eps, xmin = real(exp(mypp_lnkmin-0.08))*distlss,  xmax = real(exp(mypp_lnkmax + 0.08))*distlss, islog = .true. , label = "$\ell_k\equiv  k D_{\rm rec}$")             
 
@@ -656,8 +667,8 @@ contains
              pt_trajs(:, num_trajs) = pt
              if(first_1sigma)then
                 first_1sigma = .false.
-                call fig_pot%interpolate_curve(xraw = mypp_phi, yraw = mypp_lnV-mypp_lnV(mypp_ipivot), interpolate="LinearLinear", color = "blue", linetype = "dotted", legend="$1\sigma$, samples")
-                call fig_eps%interpolate_curve(xraw = exp(mypp_lnk), yraw = exp(mypp_lneps), interpolate = "LogLinear", color = "blue", linetype = "dotted", legend="1-$\sigma$ trajs.")
+                call fig_pot%interpolate_curve(xraw = mypp_phi, yraw = mypp_lnV-mypp_lnV(mypp_ipivot), interpolate="LinearLinear", color = "blue", linetype = "dotted", legend="$1\sigma$ samples")
+                call fig_eps%interpolate_curve(xraw = exp(mypp_lnk), yraw = exp(mypp_lneps), interpolate = "LogLinear", color = "blue", linetype = "dotted", legend="1-$\sigma$ samples")
              else
                 call fig_pot%interpolate_curve(xraw = mypp_phi, yraw = mypp_lnV-mypp_lnV(mypp_ipivot), interpolate="LinearLinear", color = "blue", linetype = "dotted")
                 call fig_eps%interpolate_curve(xraw = exp(mypp_lnk), yraw = exp(mypp_lneps), interpolate = "LogLinear", color = "blue", linetype = "dotted")
@@ -700,8 +711,8 @@ contains
        call fig_spec%curve(kmpc, ps, color = "red", linetype = "solid", linewidth = 1.5, legend="mean $\mathcal{P}_{\cal R}$")
        call fig_spec%curve(kmpc, pt, color = "violet", linetype = "solid", linewidth = 1.2, legend="mean $\mathcal{P}_{\mathrm{t}}$")
 
-       call fig_pot%interpolate_curve(xraw = mypp_phi, yraw = mypp_lnV-mypp_lnV(mypp_ipivot), interpolate="LinearLinear", color = "red", linetype = "solid", linewidth = 1.5, legend="mean traj")
-       call fig_eps%interpolate_curve(xraw = exp(mypp_lnk), yraw = exp(mypp_lneps), interpolate = "LogLinear", color = "red", linetype = "solid", linewidth = 1.5, legend="mean traj")
+       call fig_pot%interpolate_curve(xraw = mypp_phi, yraw = mypp_lnV-mypp_lnV(mypp_ipivot), interpolate="LinearLinear", color = "red", linetype = "solid", linewidth = 1.5, legend="mean")
+       call fig_eps%interpolate_curve(xraw = exp(mypp_lnk), yraw = exp(mypp_lneps), interpolate = "LogLinear", color = "red", linetype = "solid", linewidth = 1.5, legend="mean")
 
 
 
@@ -710,28 +721,36 @@ contains
        if(mypp_nknots .gt. 4)then
           ps(1:mypp_nknots+1) = 1.3
           call coop_asy_dots(fig_spec, k_knots, ps(1:mypp_nknots+1), "black", "$\Delta$")
-          ps(1:mypp_nknots+1) = 0.005
+          ps(1:mypp_nknots+1) = -0.003
           call coop_asy_dots(fig_eps, k_knots, ps(1:mypp_nknots+1), "black", "$\Delta$")
        endif
-       if(coop_postprocess_do_cls) call coop_asy_legend(fig_cls, 4., 5000., 1, box = .false.)
-       if(do_dcl)then
-          call coop_asy_legend(fig_dcls, 45., 420., 1, box = .false.)
-          call fig_dcls%close()
-       endif
-       call fig_pot%label( COOP_STR_OF(mypp_nknots+1)//" knots", 0.1, 0.1)
-       if(mc%index_of("r") .ne. 0)then
-          call coop_asy_label(fig_spec,  "free $r$", 0.012, 8., "black")
-       else
-          rval = trim(mc%inputparams%value("param[r]"))
-          if(trim(rval) .ne. "")then
-             call coop_asy_label(fig_spec, "fixed $r="//COOP_STR_OF(coop_str2real(rval))//"$", 0.012, 8., "black")
+!       if(coop_postprocess_do_cls) call coop_asy_legend(fig_cls, 4., 5000., 1, box = .false.)
+!!$       if(do_dcl)then
+!!$          call coop_asy_legend(fig_dcls, 45., 420., 1, box = .false.)
+!!$          call fig_dcls%close()
+!!$       endif
+       call fig_pot%label( COOP_STR_OF(mypp_nknots+1)//" knots", 0.1, 0.2)
+       if(trim(mc%datasets) .eq. "")then
+          if(mc%index_of("r") .ne. 0)then
+             call coop_asy_label(fig_spec,  "free $r$", 0.012, 8., "black")
+          else
+             rval = trim(mc%inputparams%value("param[r]"))
+             if(trim(rval) .ne. "")then
+                call coop_asy_label(fig_spec, "fixed $r="//COOP_STR_OF(coop_str2real(rval))//"$", 0.012, 8., "black")
+             endif
           endif
+       else
+          call coop_asy_label(fig_spec, trim(mc%datasets), 0.012, 8., "black")
+          call fig_pot%label(trim(mc%datasets), 0.1, 0.1)
+          call fig_eps%label(trim(mc%datasets), 0.2, 0.92)         
        endif
        call coop_asy_legend_advance(fig_spec, real(exp(lnkmin + 1.)), 170., "invisible", 0., 0., 0.8, 0.9, 0.9, 2)
-       call coop_asy_legend_advance(fig_eps, real(exp(mypp_lnkmin +4.)), 0.115,  "invisible", 0., 0., 0.8, 0.9, 0.9, 1)
-       call coop_asy_legend_advance(fig_pot, -0.2, 0.35, "invisible", 0., 0., 0.8, 0.9, 0.9, 1)
+!       call coop_asy_legend(fig_pot, -0.05, 0.072, 1, box=.false.)
+!       call coop_asy_legend(fig_eps, real(exp(mypp_lnkmin +2.)), 0.024, 1, box=.false.)              
+       call coop_asy_legend_advance(fig_pot, -0.05, 0.072, "invisible", 0., 0., 0.8, 0.9, 0.9, 1)
+       call coop_asy_legend_advance(fig_eps,  real(exp(mypp_lnkmin +2.)), 0.024, "invisible", 0., 0., 0.8, 0.9, 0.9, 1)       
        call fig_spec%close()
-       call fig_cls%close()
+!       call fig_cls%close()
        call fig_eps%close()
        call fig_pot%close()
 
@@ -913,7 +932,7 @@ contains
     call fp%open(trim(mc%output)//"_good.ini", "w")
     do i = 1, mc%np
        if(.not. mc%derived(i) .and. mc%vary(i))then
-          write(fp%unit, "(A, 5G16.7)") "param["//trim(mc%name(i))//"] = ",  mc%params(mc%ibest, i), max(mc%params(mc%ibest, i) - 5.*mc%std(i), mc%lower(i)), min(mc%params(mc%ibest, i)+5.*mc%std(i), mc%upper(i)), mc%std(i)*0.8, mc%std(i)*0.8
+          write(fp%unit, "(A, 5G16.7)") "param["//trim(mc%name(i))//"] = ",  mc%mean(i), max(mc%mean(i)- 5.*mc%std(i), mc%lower(i)), min(mc%mean(i)+5.*mc%std(i), mc%upper(i)), mc%std(i)*0.8, mc%std(i)*0.8
        endif
     enddo
     call fp%close()
@@ -945,7 +964,7 @@ contains
     !!covmat
     allnames = "# "
     do ip=1, mc%nprim
-       allnames = trim(allnames)//" "//trim(mc%name(mc%used(mc%prim(ip))))
+       allnames = trim(allnames)//" "//trim(mc%name(mc%prim(ip)))
     enddo
     call fp%open(trim(mc%output)//".covmat", "w")    
     write(fp%unit, "(A)") trim(allnames)
@@ -953,15 +972,27 @@ contains
     call fp%close()
 
 
-    !!covmat
+
     allnames = "# "
     do ip=1, mc%nprim
-       allnames = trim(allnames)//" "//trim(mc%name(mc%used(mc%prim(ip))))
+       allnames = trim(allnames)//" "//trim(mc%name(mc%prim(ip)))
     enddo
-    call fp%open(trim(mc%output)//".scaledcov", "w")    
+    !!scaled covmat (*0.3)
+    call fp%open(trim(mc%output)//".s3cov", "w")    
+    write(fp%unit, "(A)") trim(allnames)
+    call coop_write_matrix(fp%unit, mc%covmat(mc%prim, mc%prim)*0.3, mc%nprim, mc%nprim)
+    call fp%close()
+    !!scaled covmat (*0.2)
+    call fp%open(trim(mc%output)//".s2cov", "w")    
     write(fp%unit, "(A)") trim(allnames)
     call coop_write_matrix(fp%unit, mc%covmat(mc%prim, mc%prim)*0.2, mc%nprim, mc%nprim)
     call fp%close()
+    !!scaled covmat (*0.1)
+    call fp%open(trim(mc%output)//".s1cov", "w")    
+    write(fp%unit, "(A)") trim(allnames)
+    call coop_write_matrix(fp%unit, mc%covmat(mc%prim, mc%prim)*0.1, mc%nprim, mc%nprim)
+    call fp%close()
+
     
     allnames = "# "
     do ip=1, mc%np_used
@@ -1023,11 +1054,16 @@ contains
     do ip = 1, mc%np_used
        if(mc%want_1d_output(ip))then
           call fp%open(trim(mc%output)//"_"//trim(mc%simplename(mc%used(ip)))//"_1D.txt", "w")
-          do i = 1, mc%nb
-             x(i) = mc%plotlower(mc%used(ip)) + mc%dx(mc%used(ip))*(i-1)
-          enddo
-          call fp%init( xlabel = trim(mc%label(mc%used(ip))), ylabel = "P", width=3., height=2.5, ymin=0., ymax=1.05)
-          call coop_asy_plot_likelihood(fp, x, mc%c1d(:, ip)/maxval(mc%c1d(:, ip)), left_tail = .true., right_tail = .true., linewidth=1.5)
+          call fp%init( xlabel = trim(mc%label(mc%used(ip))), ylabel = "$P/P_{\max}$", width=6.4, height=4.8, ymin=0., ymax=1.08)          
+          if(abs(mc%skewness(mc%used(ip))) .lt. mc%fit_skewness_threshold .and. abs(mc%kurtosis(mc%used(ip))) .lt. mc%fit_kurtosis_threshold .and. mc%right_is_tail(mc%used(ip)) .and. mc%left_is_tail(mc%used(ip)) )then
+             call coop_asy_plot_Gaussianfit(fp, middle = mc%base(mc%used(ip)), mean =  mc%mean(mc%used(ip)), rms = mc%std(mc%used(ip)), skewness = mc%skewness(mc%used(ip)), lbd=mc%plotlower(mc%used(ip)), ubd = mc%plotupper(mc%used(ip)))
+          else
+             write(*,*) trim(mc%name(mc%used(ip))), " skewness = ", mc%skewness(mc%used(ip)), "; kurtosis = ", mc%kurtosis(mc%used(ip))             
+             do i = 1, mc%nb
+                x(i) = mc%plotlower(mc%used(ip)) + mc%dx(mc%used(ip))*(i-1)
+             enddo
+             call coop_asy_plot_likelihood(fp, x, mc%c1d(:, ip)/maxval(mc%c1d(:, ip)), left_tail = .true., right_tail = .true., linewidth=1.5)
+          endif
           call fp%close()
        endif
     enddo
@@ -1112,10 +1148,13 @@ contains
     class(coop_mcmc_chain) this
     COOP_INT::i
     if(.not. this%do_preprocess) return
-    call coop_feedback("rescaling probability with sqrt(epsilon_s)")
-    if(this%index_epss .ne. 0 .and. this%index_de_dUdphi .ne. 0)then
+    call coop_feedback("preprocessing...")
+    if(this%index_H0 .ne. 0)then
        do i=1, this%n
-          this%mult(i) = this%mult(i)*sqrt(this%params(i, this%index_epss))
+          if(this%params(i, this%index_H0) <55 .or. this%params(i, this%index_H0) >80)then
+             this%params(i, this%index_H0) = 70.
+             this%mult(i) = 0.
+          endif
        enddo
     endif
        

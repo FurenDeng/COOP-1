@@ -4688,7 +4688,12 @@ contains
        if(mask%nside .ne. from%nside)stop "ave_udgrade: nside(mask) != nside(from)"
     endif
     nmaps = min(from%nmaps, to%nmaps)
-    call coop_healpix_maps_copy_genre(from, to)
+    if(present(imap_to) .and. present(imap_from))then
+       call to%set_field(imap_to, trim(adjustl(from%fields(imap_from))))
+       call to%set_unit(imap_to, trim(adjustl(from%units(imap_from))))
+    else
+       call coop_healpix_maps_copy_genre(from, to)
+    endif
     call from%convert2nested()
     call to%convert2nested()
     if(from%nside .eq. to%nside)then
@@ -4785,6 +4790,109 @@ contains
        endif
     endif
   end subroutine coop_healpix_maps_ave_udgrade
+
+  subroutine coop_healpix_maps_max_udgrade(from, to, mask, imap_from, imap_to)
+    class(coop_healpix_maps)::from, to
+    class(coop_healpix_maps),optional::mask    
+    COOP_INT::div, i, imap, nmaps
+    COOP_INT,optional::imap_from, imap_to
+    if(present(mask))then
+       if(mask%nside .ne. from%nside)stop "ave_udgrade: nside(mask) != nside(from)"
+    endif
+    nmaps = min(from%nmaps, to%nmaps)
+    if(present(imap_to) .and. present(imap_from))then
+       call to%set_field(imap_to, trim(adjustl(from%fields(imap_from))))
+       call to%set_unit(imap_to, trim(adjustl(from%units(imap_from))))
+    else
+       call coop_healpix_maps_copy_genre(from, to)
+    endif
+    call from%convert2nested()
+    call to%convert2nested()
+    if(from%nside .eq. to%nside)then
+       if(present(imap_from) .and. present(imap_to))then
+          if(present(mask))then
+             to%map(:, imap_to) = from%map(:, imap_from)*mask%map(:,1)
+          else
+             to%map(:, imap_to) = from%map(:, imap_from)
+          endif
+       else
+          if(present(mask))then
+             do imap = 1, nmaps
+                to%map(:, imap) = from%map(:, imap)*mask%map(:,1)
+             enddo
+          else
+             to%map(:, 1:nmaps) = from%map(:, 1:nmaps)                
+          endif
+       endif
+       return
+    endif
+    if(present(imap_from) .and. present(imap_to))then
+       if(present(mask))then        !!with mask
+          if(from%nside .gt. to%nside)then !!degrade
+             div = (from%nside/to%nside)**2
+             do i=0, to%npix-1
+                to%map(i, imap_to) = maxval(from%map(i*div:(i+1)*div-1, imap_from)*mask%map(i*div:(i+1)*div-1, 1))
+             enddo
+             return
+          endif
+          !!upgrade
+          div = (to%nside/from%nside)**2
+          do i=0, from%npix-1
+             to%map(i*div:(i+1)*div-1, imap_to) = from%map(i, imap_from)*mask%map(i, 1)
+          enddo
+       else  !!no mask
+          if(from%nside .gt. to%nside)then !!degrade
+             div = (from%nside/to%nside)**2
+             do i=0, to%npix-1
+                to%map(i, imap_to) = maxval(from%map(i*div:(i+1)*div-1, imap_from))
+             enddo
+             return
+          endif
+          !!upgrade
+          div = (to%nside/from%nside)**2
+          do i=0, from%npix-1
+             to%map(i*div:(i+1)*div-1, imap_to) = from%map(i, imap_from)
+          enddo
+       endif
+    else  !!all maps
+       if(present(mask))then
+          if(from%nside .gt. to%nside)then !!degrade
+             div = (from%nside/to%nside)**2
+             do imap = 1, nmaps             
+                do i=0, to%npix-1
+                   to%map(i, imap) = maxval(from%map(i*div:(i+1)*div-1, imap)*mask%map(i*div:(i+1)*div-1, 1))
+                enddo
+             enddo
+             return
+          endif
+          !!upgrade
+          div = (to%nside/from%nside)**2
+          do imap = 1, nmaps
+             do i=0, from%npix-1
+                to%map(i*div:(i+1)*div-1, imap) = from%map(i, imap)*mask%map(i, 1)
+             enddo
+          enddo
+       else
+          if(from%nside .gt. to%nside)then !!degrade
+             div = (from%nside/to%nside)**2
+             do imap = 1, nmaps
+                do i=0, to%npix-1
+                   to%map(i, imap) = maxval(from%map(i*div:(i+1)*div-1, imap))
+                enddo
+             enddo
+             return
+          endif
+          !!upgrade
+          div = (to%nside/from%nside)**2
+          do imap = 1, nmaps
+             do i=0, from%npix-1
+                to%map(i*div:(i+1)*div-1, imap) = from%map(i, imap)
+             enddo
+          enddo
+       endif
+    endif
+  end subroutine coop_healpix_maps_max_udgrade
+  
 
   subroutine coop_healpix_maps_udgrade(this, nside)
     class(coop_healpix_maps)::this

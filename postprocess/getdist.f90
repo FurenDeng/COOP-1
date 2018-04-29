@@ -16,7 +16,9 @@ program getdist
   fini = coop_InputArgs(1)
   if(fini(len_trim(fini)-3:len_trim(fini)).ne.".ini")then
      fini=trim(fini)//".ini"
-  endif  
+  endif
+  
+  call coop_load_dictionary(fini, mc%settings)  
   call Ini_open(trim(fini), 7, error)
   if(error)then
      print*,"can not find ini file:"//trim(fini)
@@ -30,6 +32,11 @@ program getdist
   if(trim(Coop_InputArgs(2)).ne."")then
      prefix = trim(adjustl(coop_file_path_of(prefix)))//trim(adjustl(coop_inputArgs(2)))
   endif
+  if(trim(coop_InputArgs(3)).ne."")then
+     mc%datasets = trim(coop_InputArgs(3))
+  else
+     mc%datasets = ini_read_string("datasets")
+  endif
   outdir = ini_read_string("output", .false.)
   coop_postprocess_nbins = ini_read_int("num_bins", 0)
   coop_postprocess_num_contours = ini_read_int("num_contours", 2)
@@ -37,6 +44,8 @@ program getdist
   coop_postprocess_do_cls = ini_read_logical("do_cls", .false.)  
   if(trim(outdir) .eq. "") stop "You need to specify the key 'output' in ini file"
   discard_percent = ini_read_int("discard_percent", 30)
+  mc%fit_skewness_threshold = ini_read_real("fit_skewness_threshold", 0.1)
+  mc%fit_kurtosis_threshold = ini_read_real("fit_kurtosis_threshold", 0.02)  
   write(*,*) "discarding "//trim(coop_num2str(discard_percent))//"% samples at the beginning of chains"
 
   if(mcmc_stat_num_cls .ge.6)then
