@@ -71,14 +71,14 @@ contains
     COOP_INT,dimension(:),optional::in, out
     COOP_INT::i, j
     if(present(in) .and. present(out))then
-       if(size(in) .ne. this%nc .or. size(out) .ne. this%nc) stop "coop_nn_layer_init_connections: sizes do not match"
+       if(size(in) .ne. this%nc .or. size(out) .ne. this%nc) call coop_return_error("coop_nn_layer_init_connections","# of connections do not match", "stop")
 
        do i = 1, this%nc
           this%c(i)%in = in(i)
           this%c(i)%out = out(i)
        enddo
     else
-       if(this%nc .ne. this%nin*this%nout) stop "coop_nn_layer_init_connections: sizes do not match"
+       if(this%nc .ne. this%nin*this%nout) call coop_return_error("coop_nn_layer_init_connections", "# of connections do not match", "stop")
        do i=0, this%nin-1
           do j=0, this%nout-1
              this%c(i*this%nout + j + 1)%in = i+1
@@ -171,7 +171,7 @@ contains
     class(coop_nn_layer)::this
     class(coop_nn_layer)::next
     COOP_INT::i
-    if(next%nin .ne. this%nout) stop "coop_nn_layer_propogate: layers do not fit" !!quick check
+    if(next%nin .ne. this%nout) call coop_return_error("coop_nn_layer_propogate","layers do not fit", "stop") !!quick check
     next%v(1:this%nout) = this%bias(1:this%nout)
     do i=1, this%nc
        next%v(this%c(i)%out) = next%v(this%c(i)%out) + this%v(this%c(i)%in)*this%c(i)%weight

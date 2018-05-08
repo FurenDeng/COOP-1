@@ -2,9 +2,16 @@ program shells
   use coop_healcnn_mod
   implicit none
 #include "constants.h"
-  type(coop_healcnn_layer)::layer
-  call layer%init(nside_in = 256, nside_pooling = 128, nside_out = 128, nmaps_in = 2, nmaps_out = 3)
-  print*, layer%h%nside, layer%h%nmaps, layer%h%lmax
-  print*, layer%c(6)%nb
-  print*, layer%c(6)%kernel(1, 0.99d0),  layer%c(6)%kernel(2, 0.99d0),  layer%c(6)%kernel(3, 0.99d0),  layer%c(6)%kernel(4, 0.99d0)
+  type(coop_healcnn)::cnn
+  call cnn%init(nlayers = 3, map = "zetaproj/gp_meanchi43_sigmachi1_300_TE.fits", mask="zetaproj/mask.fits",  nmaps= (/ 1, 3, 1 /), nside = (/ 256, 32, 8 /) , nside_pooling = (/ 128, 32 /) )
+  write(*,*) cnn%layers(1)%c(1)%lmin
+  write(*,*) cnn%layers(1)%c(1)%lmax
+  write(*,*) cnn%layers(1)%c(2)%lmin
+  write(*,*) cnn%layers(1)%c(2)%lmax
+  write(*,*) cnn%layers(1)%c(3)%lmin
+  write(*,*) cnn%layers(1)%c(3)%lmax  
+  call cnn%fp()
+  call cnn%layers(1)%h%write("cnn1.fits")    
+  call cnn%layers(2)%h%write("cnn2.fits")  
+  call cnn%layers(3)%h%write("cnn3.fits")
 end program shells

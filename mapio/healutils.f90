@@ -396,7 +396,8 @@ contains
     stop "You need to compile with Healpix to use pix2ang" 
 #endif       
   end subroutine coop_healpix_maps_pix2vec
-  
+
+
   subroutine coop_healpix_spot_cut_mask(nside, l_deg, b_deg, r_deg, filename)
     COOP_INT::nside
     COOP_REAL::l_deg, b_deg, r_deg
@@ -1969,15 +1970,19 @@ contains
 
   subroutine coop_healpix_maps_allocate_alms(this, lmax)
     class(coop_healpix_maps) this
-    COOP_INT lmax
-    if(allocated(this%alm))then
+    COOP_INT,optional:: lmax
+    if(present(lmax))then
        if(this%lmax  .eq. lmax )then
+          this%alm = 0.
+          this%cl = 0.
           return
        endif
-       deallocate(this%alm)
+       this%lmax = lmax
+       COOP_DEALLOC(this%alm)
+       COOP_DEALLOC(this%cl)
+    else
+       this%lmax  = floor(this%nside*coop_healpix_lmax_by_nside)       
     endif
-    if(allocated(this%cl))deallocate(this%cl)
-    this%lmax = lmax
     allocate(this%alm(0:this%lmax, 0:this%lmax, this%nmaps))
     allocate(this%cl(0:this%lmax, this%nmaps*(this%nmaps+1)/2))
     this%alm = 0.
@@ -4899,6 +4904,7 @@ contains
     COOP_SINGLE, dimension(:,:),allocatable::newmap
     COOP_INT nside, npix
 #if HAS_HEALPIX
+    if(nside .eq. this%nside) return
     npix = nside2npix(nside)
     allocate(newmap(0:npix-1, this%nmaps))
     if(this%ordering .eq. COOP_NESTED)then
@@ -5536,34 +5542,50 @@ contains
     type(coop_healpix_maps)::mask
     logical,optional::remove_monopole
     logical,optional::bad_data
-    COOP_INT::i
+    COOP_INT::i, nrat
     COOP_REAL::summask
-    if(mask%nside .ne. this%nside) stop "apply_mask:mask and map must have the same nside"
-    if(mask%ordering .ne. this%ordering)then
-       call mask%convert2nested()
-       call this%convert2nested()
-    endif
-    if(present(remove_monopole))then
-       if(remove_monopole)then
-          summask =  sum(dble(mask%map(:,1)))
+    if(this%nside .eq. mask%nside)then
+       if(mask%ordering .ne. this%ordering)then
+          call mask%convert2nested()
+          call this%convert2nested()
+       endif
+       if(present(remove_monopole))then
+          if(remove_monopole)then
+             summask =  sum(dble(mask%map(:,1)))
+          else
+             summask = 0.d0
+          endif
        else
           summask = 0.d0
        endif
-    else
-       summask = 0.d0
-    endif
-    do i=1, this%nmaps
-       if(summask .ge. 1.d0)then
-          this%map(:, i) = this%map(:, i) - sum(dble(this%map(:, i)*mask%map(:,1)))/summask
+       do i=1, this%nmaps
+          if(summask .ge. 1.d0)then
+             this%map(:, i) = this%map(:, i) - sum(dble(this%map(:, i)*mask%map(:,1)))/summask
+          endif
+          this%map(:,i) = this%map(:,i)*mask%map(:,1)
+       enddo
+       if(present(bad_data))then
+          if(bad_data)then
+             do i=1, this%nmaps
+                where(mask%map(:,1) .lt. 0.5)
+                   this%map(:, i) = this%bad_data
+                end where
+             enddo
+          endif
        endif
-       this%map(:,i) = this%map(:,i)*mask%map(:,1)
-    enddo
-    if(present(bad_data))then
-       if(bad_data)then
-          do i=1, this%nmaps
-             where(mask%map(:,1) .lt. 0.5)
-                this%map(:, i) = this%bad_data
-             end where
+    else
+       if(present(bad_data) .or. present(remove_monopole)) stop "apply_mask: for different nside only support simple binary mask."
+       call mask%convert2nested()
+       call this%convert2nested()
+       if(this%nside .gt. mask%nside)then
+          nrat = (this%nside/mask%nside)**2
+          do i=0, mask%npix-1
+             this%map(i*nrat:(i+1)*nrat-1, :) = this%map(i*nrat:(i+1)*nrat-1, :) * mask%map(i,1)
+          enddo
+       else
+          nrat = (mask%nside/this%nside)**2
+          do i=0, this%npix-1
+             this%map(i, :) = this%map(i, :) * (sum(mask%map(i*nrat:(i+1)*nrat-1, 1))/nrat)
           enddo
        endif
     endif
