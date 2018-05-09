@@ -1,17 +1,19 @@
 program shells
-  use coop_healcnn_mod
+  use coop_hnn_mod
   implicit none
 #include "constants.h"
-  type(coop_healcnn)::cnn
-  call cnn%init(nlayers = 3, map = "zetaproj/gp_meanchi43_sigmachi1_300_TE.fits", mask="zetaproj/mask.fits",  nmaps= (/ 1, 3, 1 /), nside = (/ 256, 32, 8 /) , nside_pooling = (/ 128, 32 /) )
-  write(*,*) cnn%layers(1)%c(1)%lmin
-  write(*,*) cnn%layers(1)%c(1)%lmax
-  write(*,*) cnn%layers(1)%c(2)%lmin
-  write(*,*) cnn%layers(1)%c(2)%lmax
-  write(*,*) cnn%layers(1)%c(3)%lmin
-  write(*,*) cnn%layers(1)%c(3)%lmax  
-  call cnn%fp()
-  call cnn%layers(1)%h%write("cnn1.fits")    
-  call cnn%layers(2)%h%write("cnn2.fits")  
-  call cnn%layers(3)%h%write("cnn3.fits")
+  type(coop_hnn):: hnn
+  type(coop_healpix_maps)::map
+  COOP_INT::i
+  call  map%read("zetaproj/gp_meanchi43_sigmachi1_300_TE.fits", nmaps_wanted = 1)
+
+  call hnn%init( nmaps = (/ 10,  20,  20,  5,  5, 1 /), nside = (/ 256,  256, 64,  64,  16, 16 /), input = map, delta_ell = 20 )
+  hnn%true_out = 1.
+  do i=0, 100
+     call hnn%walk(step = 0.1d0)
+     print*, hnn%Err(), hnn%best_Err
+  enddo
+  
+
+
 end program shells

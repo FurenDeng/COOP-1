@@ -22,7 +22,6 @@ Module coop_nn_mod
      COOP_REAL :: weight = 0.d0
      COOP_REAL :: best_weight = 0.d0     
      COOP_REAL :: dw = 0.d0
-!     COOP_REAL:: last_dw = 0.d0
   end type coop_nn_connection
 
   type coop_nn_layer
@@ -35,9 +34,6 @@ Module coop_nn_mod
      COOP_REAL,dimension(:),allocatable::bias
      COOP_REAL,dimension(:),allocatable::best_bias     
      COOP_REAL,dimension(:),allocatable::db
-!!$     COOP_REAL,dimension(:),allocatable::last_db
-!!$     COOP_REAL,dimension(:,:),allocatable::full_w
-!!$     COOP_REAL,dimension(:,:),allocatable::full_dw
    contains
      procedure::init=>coop_nn_layer_init
      procedure::full_init=>coop_nn_layer_full_init     

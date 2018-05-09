@@ -1733,7 +1733,9 @@ contains
     this%npix = nside2npix(nside)
     allocate(this%map(0:this%npix - 1, nmaps))
     allocate(this%spin(this%nmaps), this%fields(this%nmaps), this%units(this%nmaps))
-100 if(present(lmax)) call this%allocate_alms(lmax)
+100 if(present(lmax))then
+       call this%allocate_alms(lmax)
+    endif
     this%ordering = COOP_RING !!default ordering
     if(present(genre))then
        select case(trim(adjustl(coop_str_numUpperalpha(genre))))
@@ -5544,6 +5546,7 @@ contains
     logical,optional::bad_data
     COOP_INT::i, nrat
     COOP_REAL::summask
+    if(mask%nside .eq. 0) return
     if(this%nside .eq. mask%nside)then
        if(mask%ordering .ne. this%ordering)then
           call mask%convert2nested()

@@ -1,503 +1,454 @@
-module coop_healcnn_mod
-  use coop_wrapper_utils
-  use coop_sphere_mod
-  use coop_fitsio_mod
+module coop_hnn_mod
   use coop_healpix_mod
-  use coop_stacking_mod
-  use coop_fitswrap_mod
-  use coop_gstack_mod
+  use coop_wrapper_firstorder
   implicit none
-#include "constants.h"
-#define ACTIVATE_FUNCTION 0
+  
+#include "constants.h"  
+
+#define ACTIVATE_FUNCTION 3
   !! 0 = sigmoid
   !! 1 = ReLU (Rectified Linear Unit)
   !! 2 = tanh
   !! 3 = modified ReLU
-
-  COOP_INT,parameter::coop_healcnn_default_delta_ell = 10
-
-  
-  type coop_healcnn_connection
-     COOP_INT::imap_in = 0
-     COOP_INT::imap_out = 0     
-     COOP_INT::nb = 0
-     COOP_INT::nx = 0     
-     COOP_INT,dimension(:),allocatable::lmin
-     COOP_INT,dimension(:),allocatable::lmax
-     COOP_REAL,dimension(:),allocatable::w
-     COOP_REAL,dimension(:),allocatable::dw     
-     COOP_REAL,dimension(:),allocatable::x
-     COOP_REAL,dimension(:,:),allocatable::P
-   contains
-     procedure::init => coop_healcnn_connection_init
-     procedure::default => coop_healcnn_connection_default     
-     procedure::free => coop_healcnn_connection_free
-     procedure::kernel => coop_healcnn_connection_kernel
-  end type coop_healcnn_connection
-
-
-  type coop_healcnn_layer
-     type(coop_healpix_maps)::h
-     type(coop_healpix_maps)::dh
-     type(coop_healpix_maps)::pooling     
-     type(coop_healcnn_connection),dimension(:),allocatable::c
-     COOP_REAL,dimension(:),allocatable::bias, db
-     COOP_INT::nside_in,  nside_out, nmaps_in, nmaps_out, nc
-
-   contains
-     procedure::free => coop_healcnn_layer_free
-     procedure::init => coop_healcnn_layer_init
-     procedure::read => coop_healcnn_layer_read
-     procedure::propogate => coop_healcnn_layer_propogate
-     procedure::chain_derv => coop_healcnn_layer_chain_derv     
-  end type coop_healcnn_layer
-
-  type coop_healcnn
-     COOP_INT::nlayers = 0
-     type(coop_healcnn_layer),dimension(:),allocatable::layers
-     type(coop_healpix_maps)::mask
-   contains
-     procedure::free => coop_healcnn_free
-     procedure::init => coop_healcnn_init
-     procedure::fp => coop_healcnn_fp
-  end type coop_healcnn
-
+  !!all maps are converted to nested ordering
 
   
+  interface coop_hnn_activate
+     module procedure coop_hnn_activate_s, coop_hnn_activate_v, coop_hnn_activate_vv
+  end interface coop_hnn_activate
+
+  interface coop_hnn_activate_derv
+     module procedure coop_hnn_activate_derv_s, coop_hnn_activate_derv_v, coop_hnn_activate_derv_vv
+  end interface coop_hnn_activate_derv
+  
+  type coop_hnn_connection
+     COOP_INT:: in = 0
+     COOP_INT:: out = 0
+     COOP_REAL :: weight = 0.d0
+     COOP_REAL :: best_weight = 0.d0     
+     COOP_REAL :: dw = 0.d0
+  end type coop_hnn_connection
+
+  type coop_hnn_layer
+     COOP_INT:: nin =0
+     COOP_INT:: nc=0
+     COOP_INT:: nout = 0
+     COOP_INT:: nside = 0
+     type(coop_healpix_maps)::v, dv
+     type(coop_hnn_connection),dimension(:),allocatable::c
+     COOP_REAL,dimension(:),allocatable::bias
+     COOP_REAL,dimension(:),allocatable::best_bias     
+     COOP_REAL,dimension(:),allocatable::db
+   contains
+     procedure::init=>coop_hnn_layer_init
+     procedure::free=>coop_hnn_layer_free     
+     procedure::propogate => coop_hnn_layer_propogate
+     procedure::chain_derv => coop_hnn_layer_chain_derv
+     procedure::init_connections => coop_hnn_layer_init_connections
+  end type coop_hnn_layer
+
+  type coop_hnn
+     COOP_INT::nlayers, nin, nout
+     COOP_REAL::best_Err = 1.d99     
+     type(coop_hnn_layer),dimension(:),allocatable::layers
+     COOP_REAL,dimension(:),allocatable::true_out
+   contains
+     procedure::init=>coop_hnn_init
+     procedure::free=>coop_hnn_free
+     procedure::fp => coop_hnn_fp
+     procedure::bp => coop_hnn_bp
+     procedure::rand => coop_hnn_rand
+     procedure::Err => coop_hnn_Err
+     procedure::walk => coop_hnn_walk
+  end type coop_hnn
 
 contains
 
 
-  subroutine  coop_healcnn_fp(this)
-    class(coop_healcnn)::this
-    COOP_INT::il
-    do il=1, this%nlayers-1
-       call this%layers(il)%propogate(next = this%layers(il+1))
-    enddo
-  end subroutine coop_healcnn_fp
+  subroutine  coop_hnn_layer_init_connections(this, in, out)
+    class(coop_hnn_layer)::this
+    COOP_INT,dimension(:),optional::in, out
+    COOP_INT::i, j
+    if(present(in) .and. present(out))then
+       if(size(in) .ne. this%nc .or. size(out) .ne. this%nc) call coop_return_error("coop_hnn_layer_init_connections","# of connections do not match", "stop")
 
-
-  subroutine  coop_healcnn_bp(this)
-    class(coop_healcnn)::this
-    COOP_INT::il
-    call this%layers(this%nlayers)%h%apply_mask(this%mask)
-    this%layers(this%nlayers)%dh%map = this%layers(this%nlayers)%h%map
-    do il = this%nlayers-1, 1, -1
-       call this%layers(il)%chain_derv(next = this%layers(il+1))
-    enddo
-  end subroutine coop_healcnn_bp
-
-
-  subroutine coop_healcnn_layer_chain_derv(this, next)
-    class(coop_healcnn_layer)::this
-    type(coop_healcnn_layer)::next
-    type(coop_healpix_maps)::tmp
-    COOP_REAL,parameter::radius = coop_SI_degree*15.d0
-    COOP_INT::imap, i, ic, ib,  l, LL, pix
-    COOP_INT::nlist
-    COOP_REAL::vec1(3), vec2(3)
-    COOP_INT,dimension(:),allocatable::listpix
-    COOP_REAL::theta, phi
-    if(next%h%nmaps .ne. this%nmaps_out) call coop_return_error("coop_healcnn_layer_chain_derv", "nmaps_out does not match", "stop")
-    if(next%h%nside .eq. this%nside_out)then
-       do i=1, this%nmaps_out
-          this%db(i) = sum(next%dh%map(:, i))
+       do i = 1, this%nc
+          this%c(i)%in = in(i)
+          this%c(i)%out = out(i)
        enddo
-       this%dh%map = 0.
-       do ic=1, this%nc
-          this%c(ic)%dw = 0.d0
-       enddo
-       call tmp%init(nside = this%nside_out, nmaps = 1, genre="UNKNOWN")
-       call tmp%allocate_alms()
-       tmp%alm = 0.
-       LL = min(tmp%lmax, this%h%lmax)
-       allocate(listpix(0:this%h%npix-1))
-       do ic=1, this%nc          
-          do ib=1, this%c(ic)%nb
-             do l = this%c(ic)%lmin(ib), this%c(ic)%lmax(ib)
-                if(l .gt. LL)exit
-                tmp%alm(l, 0:l, 1)=this%h%alm(l, 0:l, this%c(ic)%imap_in)
-             enddo
-             call tmp%alm2map()
-             do i=0, tmp%npix-1
-                this%c(ic)%dw(ib) = this%c(ic)%dw(ib) + next%dh%map(i, this%c(ic)%imap_out) * tmp%map(i,1) * coop_healcnn_activate_derv(next%h%map(i, this%c(ic)%imap_out))
-             enddo
-             do l = this%c(ic)%lmin(ib), this%c(ic)%lmax(ib)
-                if(l .gt. LL)exit                
-                tmp%alm(l, 0:l, 1)=0.
-             enddo
+    else
+       if(this%nc .ne. this%nin*this%nout) call coop_return_error("coop_hnn_layer_init_connections", "# of connections do not match", "stop")
+       do i=0, this%nin-1
+          do j=0, this%nout-1
+             this%c(i*this%nout + j + 1)%in = i+1
+             this%c(i*this%nout + j + 1)%out = j+1 
           enddo
        enddo
-       do pix = 0, next%h%npix-1
-          call next%h%pix2ang(pix, theta, phi)
-          call this%h%ang2pix(theta, phi, i)
-          call this%h%query_disc(i, radius, listpix, nlist)
-          call this%h%pix2vec(i, vec1)
-          do ic=1, this%nc          
-             do ib=1, this%c(ic)%nb
-                do i=0, nlist-1
-                   call this%h%pix2vec(listpix(i), vec2)
-                   this%dh%map(listpix(i), this%c(ic)%imap_in) = this%dh%map(listpix(i), this%c(ic)%imap_in) + next%dh%map(pix, this%c(ic)%imap_out) * coop_healcnn_activate_derv(next%h%map(pix, this%c(ic)%imap_out))*this%c(ic)%kernel(ib, dot_product(vec1, vec2))*this%c(ic)%w(ib)
-                enddo
-             enddo
-          enddo
-       enddo
-       this%dh%map = this%dh%map/ this%dh%npix
-       deallocate(listpix)
-       call tmp%free()
-    elseif(next%h%nside .lt. this%nside_out)then !!do max pooling       
     endif
-  end subroutine coop_healcnn_layer_chain_derv
+  end subroutine coop_hnn_layer_init_connections
+
+  subroutine coop_hnn_layer_free(this)
+    class(coop_hnn_layer)::this
+    call this%v%free()
+    call this%dv%free()
+    COOP_DEALLOC(this%c)
+    COOP_DEALLOC(this%bias)
+    COOP_DEALLOC(this%best_bias)    
+    COOP_DEALLOC(this%db)
+    this%nin = 0
+    this%nc = 0
+    this%nout = 0
+  end subroutine coop_hnn_layer_free
+
+
+
+  subroutine coop_hnn_layer_init(this, nin, nout, nside, nc)
+    class(coop_hnn_layer)::this
+    COOP_INT::nin, nout, nside
+    COOP_INT,optional::nc
+    if(this%nin .ne. nin .or. this%nside .ne. nside)then
+       call this%v%free
+       call this%dv%free
+       this%nin = nin
+       this%nside = nside
+       call this%v%init(nside = nside, nmaps = nin, genre="UNKNOWN", nested = .true.)
+       this%dv = this%v
+    endif
+    if(this%nout .ne. nout)then
+       COOP_DEALLOC(this%bias)
+       COOP_DEALLOC(this%best_bias)       
+       COOP_DEALLOC(this%db)
+       this%nout = nout
+       if(nout .gt. 0)then
+          allocate(this%bias(nout))
+          allocate(this%best_bias(nout))          
+          allocate(this%db(nout))
+       endif
+    endif
+    if(present(nc))then
+       if(this%nc .ne. nc)then
+          COOP_DEALLOC(this%c)
+          this%nc = nc
+          if(nc.gt.0) allocate(this%c(nc))
+       endif
+    else
+       this%nc = this%nin*this%nout
+       if(this%nc .gt. 0)then
+          allocate(this%c(this%nc))
+          call this%init_connections()
+       endif
+    endif
+  end subroutine coop_hnn_layer_init
+
+
+
+
+  subroutine coop_hnn_layer_propogate(this, next)
+    class(coop_hnn_layer)::this
+    class(coop_hnn_layer)::next
+    COOP_INT::i, j
+    if(next%nin .ne. this%nout) call coop_return_error("coop_hnn_layer_propogate","layers cannot be connected", "stop") !!quick check
+    if(next%nside .eq. this%nside .and. this%nc .gt. 0)then
+       do i=1, this%nout
+          next%v%map(:, i) = this%bias(i)
+       enddo
+       do i=1, this%nc
+          next%v%map(:, this%c(i)%out) = next%v%map(:, this%c(i)%out) + this%v%map(:, this%c(i)%in)*this%c(i)%weight
+       enddo
+       next%v%map = coop_hnn_activate(next%v%map)
+    elseif(next%nside .lt. this%nside .and. this%nin .eq. next%nin .and. this%nc .eq. 0)then !!pooling
+       call coop_healpix_maps_max_udgrade(this%v, next%v)
+    else
+       call coop_return_error("coop_hnn_layer_propogate","layers cannot be connected", "stop") !!quick check
+    endif
+  end subroutine coop_hnn_layer_propogate
+
+
+  subroutine coop_hnn_layer_chain_derv(this, next)
+    class(coop_hnn_layer)::this
+    class(coop_hnn_layer)::next
+    COOP_INT::i, j, div
+    if(next%nin .ne. this%nout) call coop_return_error("coop_hnn_layer_chain_derv","layers cannot be connected", "stop") !!quick check
+    if(next%nside .eq. this%nside .and. this%nc .gt. 0)then
+       do i=1, this%nout
+          this%db(i) =  sum(next%dv%map(:,i)*coop_hnn_activate_derv(next%v%map(:,i)))
+       enddo
+       this%dv%map = 0.
+       do i=1, this%nc
+          this%dv%map(:, this%c(i)%in) = this%dv%map(:, this%c(i)%in) + next%dv%map(:, this%c(i)%out)  *  coop_hnn_activate_derv(next%v%map(:, this%c(i)%out)) * this%c(i)%weight
+          this%c(i)%dw = sum(next%dv%map(:, this%c(i)%out) * coop_hnn_activate_derv(next%v%map(:, this%c(i)%out)) * this%v%map(:, this%c(i)%in))
+       enddo
+    elseif(next%nside .lt. this%nside .and. this%nin .eq. next%nin .and. this%nc .eq. 0)then !!pooling
+       this%db = 0.
+       this%dv%map = 0.
+       div=(this%nside/next%nside)**2
+       do j=1, this%dv%nmaps
+          do i=0, next%dv%npix-1
+             this%dv%map(i*div+coop_maxloc(this%dv%map(i*div:(i+1)*div-1, j))-1, j) = next%dv%map(i, j)
+          enddo
+       enddo
+    else
+       call coop_return_error("coop_hnn_layer_chain_derv","layers cannot be connected", "stop") !!quick check
+    endif
+       
+  end subroutine coop_hnn_layer_chain_derv
+
+
+  subroutine coop_hnn_rand(this)
+    class(coop_hnn)::this
+    COOP_INT::i,j
+    do i=1, this%nlayers
+       if(this%layers(i)%nout .gt. 0) call random_number(this%layers(i)%bias)
+       do j=1, this%layers(i)%nc
+          call random_number(this%layers(i)%c(j)%weight)
+       enddo
+    enddo
+  end subroutine coop_hnn_rand
+
   
-
-  subroutine coop_healcnn_layer_propogate(this, next)
-    class(coop_healcnn_layer)::this
-    type(coop_healcnn_layer)::next
-    COOP_INT::ic,ib, i, j, l, thislmax
-    if(next%h%nmaps .ne. this%nmaps_out) call coop_return_error("coop_healcnn_layer_propogate", "nmaps_out does not match", "stop")
-    call this%h%map2alm()
-    call next%h%allocate_alms()
-    if(next%h%nside .eq. this%nside_out)then
-       thislmax = min(this%h%lmax, next%h%lmax)
-       do ic = 1, this%nc
-          do ib=1, this%c(ic)%nb
-             if(this%c(ic)%lmin(ib) .gt. thislmax)exit
-             do l=this%c(ic)%lmin(ib), this%c(ic)%lmax(ib)
-                if(l .gt. thislmax) exit
-                next%h%alm(l, 0:l,  this%c(ic)%imap_out) = this%h%alm(l, 0:l,  this%c(ic)%imap_in)*this%c(ic)%w(ib)
-             enddo
-          enddo
-       enddo
-       call next%h%alm2map()
-       do j=1, next%h%nmaps
-          do i=0, next%h%npix-1
-             next%h%map(i,j) = coop_healcnn_activate(next%h%map(i,j))
-          enddo
-       enddo
-    elseif(next%h%nside .lt. this%nside_out)then !!do max pooling
-       call this%pooling%init(nside = this%nside_out, nmaps = this%nmaps_out, genre="UNKNOWN")
-       call this%pooling%allocate_alms()
-       thislmax = min(this%h%lmax, this%pooling%lmax)
-       do ic = 1, this%nc
-          do ib=1, this%c(ic)%nb
-             if(this%c(ic)%lmin(ib) .gt. thislmax)exit
-             do l=this%c(ic)%lmin(ib), this%c(ic)%lmax(ib)
-                if(l .gt. thislmax) exit
-                this%pooling%alm(l, 0:l,  this%c(ic)%imap_out) = this%h%alm(l, 0:l,  this%c(ic)%imap_in)*this%c(ic)%w(ib)
-             enddo
-          enddo
-       enddo
-       call this%pooling%alm2map()
-       call this%pooling%write("this%pooling.fits")
-       do j=1, this%pooling%nmaps
-          do i=0, this%pooling%npix-1
-             this%pooling%map(i,j) = coop_healcnn_activate(this%pooling%map(i,j))
-          enddo
-       enddo
-       call coop_healpix_maps_max_udgrade(from = this%pooling, to = next%h)
-    else
-       call coop_return_error("coop_healcnn_layer_propogate", "pooling nside < output nside is not supported","stop") 
-    endif
-  end subroutine coop_healcnn_layer_propogate
-
-
-  subroutine coop_healcnn_init(this, nlayers, map, mask, nmaps, nside, nside_pooling)
-    class(coop_healcnn)::this
-    COOP_INT::nlayers
-    COOP_UNKNOWN_STRING::map, mask
-    COOP_INT::nmaps(nlayers), nside(nlayers)
-    COOP_INT,optional::nside_pooling(nlayers-1)
-    COOP_INT::il
-    this%nlayers = nlayers
-    allocate(this%layers(nlayers))
-    call this%mask%read(filename = mask)    
-    if(present(nside_pooling))then
-       call this%layers(1)%read(filename=map, nmaps_in=nmaps(1), nside_in = nside(1), nmaps_out = nmaps(2), nside_out = nside_pooling(1))
-       do il = 2, this%nlayers-1
-          call this%layers(il)%init(nside_in = nside(il), nside_out = nside_pooling(il), nmaps_in = nmaps(il), nmaps_out = nmaps(il+1))
-       enddo       
-    else
-       call this%layers(1)%read(filename=map, nmaps_in=nmaps(1), nside_in = nside(1), nmaps_out = nmaps(2), nside_out = nside(2))       
-       do il = 2, this%nlayers-1
-          call this%layers(il)%init(nside_in = nside(il), nside_out = nside(il+1), nmaps_in = nmaps(il), nmaps_out = nmaps(il+1))
-       enddo
-    endif
-    call this%layers(nlayers)%init(nside_in = nside(nlayers), nside_out = 4, nmaps_in = nmaps(nlayers), nmaps_out = 1) 
-  end subroutine coop_healcnn_init
-
-
-  subroutine coop_healcnn_free(this)
-    class(coop_healcnn)::this
+  subroutine coop_hnn_fp(this)
+    class(coop_hnn)::this
     COOP_INT::i
-    call this%mask%free()
+    do i=2, this%nlayers
+       call this%layers(i-1)%propogate(this%layers(i))
+    enddo
+  end subroutine coop_hnn_fp
+
+  subroutine coop_hnn_bp(this)
+    class(coop_hnn)::this
+    COOP_INT::i, j
+    do i=1, this%layers(this%nlayers)%dv%nmaps
+       this%layers(this%nlayers)%dv%map(:, i) = sum(this%layers(this%nlayers)%v%map(:, i)) - this%true_out(i)
+    enddo
+    do i=this%nlayers-1, 1, -1
+       call this%layers(i)%chain_derv(this%layers(i+1))
+    enddo
+  end subroutine coop_hnn_bp
+  
+  subroutine coop_hnn_free(this)
+    class(coop_hnn)::this
+    COOP_INT::i
     do i=1, this%nlayers
        call this%layers(i)%free()
     enddo
+    COOP_DEALLOC(this%layers)
     this%nlayers = 0
-  end subroutine coop_healcnn_free
+    this%nin = 0
+    this%nout = 0
+  end subroutine coop_hnn_free
 
-  subroutine coop_healcnn_layer_free(this)
-    class(coop_healcnn_layer)::this
-    call this%h%free()
-    call this%dh%free()
-    call this%pooling%free()
-    COOP_DEALLOC(this%c)
-    COOP_DEALLOC(this%bias)
-    COOP_DEALLOC(this%db)    
-  end subroutine coop_healcnn_layer_free
-
-  
-
-  subroutine coop_healcnn_layer_init(this, nside_in,  nside_out, nmaps_in, nmaps_out, nc)
-    class(coop_healcnn_layer)::this
-    COOP_INT::nside_in,  nside_out, nmaps_in, nmaps_out
-    COOP_INT,optional::nc
-    COOP_INT::i, j, k
-    call this%free()
-    this%nside_in = nside_in
-    this%nside_out = nside_out    
-    this%nmaps_in = nmaps_in
-    this%nmaps_out = nmaps_out
-    
-    call this%h%init(nside = nside_in, nmaps = nmaps_in, genre="UNKNOWN")
-    this%dh = this%h
-    allocate(this%bias(nmaps_out), this%db(nmaps_out))
-    this%bias = 0.
-    this%db=0.
-    
-    if(present(nc))then
-       this%nc = nc
-       allocate(this%c(this%nc))
-    else !!full connections
-       this%nc = nmaps_in * nmaps_out
-       allocate(this%c(this%nc))       
-       k = 0
-       do i=1, nmaps_in
-          do j=1, nmaps_out
-             k = k + 1
-             call this%c(k)%default(this%nside_out, n = nmaps_out, k = j, delta_ell = coop_healcnn_default_delta_ell)
-             this%c(k)%imap_in = i
-             this%c(k)%imap_out = j
-          enddo
-       enddo
-    endif
-  end subroutine coop_healcnn_layer_init
-
-
-  subroutine coop_healcnn_layer_read(this, filename,  nmaps_in, nside_in, nside_out, nmaps_out, nc)
-    class(coop_healcnn_layer)::this    
-    COOP_UNKNOWN_STRING::filename
-    COOP_INT::nside_out, nmaps_out, nmaps_in, nside_in
-    COOP_INT,optional::nc
-    COOP_INT::i, j, k
-    call this%free()
-    call this%h%read(filename = filename, nmaps_wanted = nmaps_in)
-    this%dh = this%h
-    if(this%h%nside .ne. nside_in) call this%h%udgrade(nside = nside_in)
-    
-    this%nside_in = this%h%nside
-    this%nside_out = nside_out    
-    this%nmaps_in = this%h%nmaps
-    this%nmaps_out = nmaps_out
-
-    allocate(this%bias(nmaps_out), this%db(nmaps_out))
-    this%bias = 0.
-    this%db=0.
-    if(present(nc))then
-       this%nc = nc
-       allocate(this%c(this%nc))
-    else !!full connections
-       this%nc = this%nmaps_in * this%nmaps_out
-       allocate(this%c(this%nc))       
-       k = 0
-       do i=1, this%nmaps_in
-          do j=1, this%nmaps_out
-             k = k + 1
-             call this%c(k)%default(nside = this%nside_out, n = this%nmaps_out, k = j, delta_ell = coop_healcnn_default_delta_ell)
-             this%c(k)%imap_in = i
-             this%c(k)%imap_out = j
-          enddo
-       enddo
-    endif
-  end subroutine coop_healcnn_layer_read
-  
-
-  subroutine coop_healcnn_connection_free(this)
-    class(coop_healcnn_connection)::this
-    COOP_DEALLOC(this%lmin)
-    COOP_DEALLOC(this%lmax)    
-    COOP_DEALLOC(this%w)
-    COOP_DEALLOC(this%dw)    
-    COOP_DEALLOC(this%x)
-    COOP_DEALLOC(this%P)
-    this%nb = 0
-    this%nx = 0
-    this%imap_in = 0
-    this%imap_out = 0        
-  end subroutine coop_healcnn_connection_free
-
-  subroutine coop_healcnn_connection_default(this, nside, n, k, delta_ell)
-    class(coop_healcnn_connection)::this
-    COOP_REAL,dimension(:),allocatable::x
-    COOP_INT,dimension(:),allocatable::ells    
-    COOP_INT:: nside, nx, lmax, nl, i, lmin, dell
-    COOP_INT,optional::n, k, delta_ell
-    lmax = floor(nside*coop_healpix_lmax_by_nside)+1    
-    if(present(n).and.present(k))then
-       lmin = lmax*(k-1)/n       
-       lmax = lmax*k/n 
-    else
-       lmin = 0
-    endif
-    if(present(delta_ell))then
-       nl = max((lmax-lmin)/delta_ell, 1)       
-    else
-       nl = max((lmax-lmin)/15, 1)
-    endif
-    nx = max(lmax * 5, 100)
-    dell = nint((lmax-lmin+1.d0)/nl)
-    allocate(ells(0:nl))
-    allocate(x(nx))
-    call coop_set_uniform(nx, x, coop_pio2, 0.d0)
-    ells(0) = lmin
-    do i=1, nl-1
-       ells(i) = ells(i-1)+dell
+  function coop_hnn_Err(this) result(Err)
+    class(coop_hnn)::this    
+    COOP_REAL::Err
+    COOP_INT::i
+    Err = 0.
+    do i=1, this%layers(this%nlayers)%v%nmaps
+       Err = Err + (this%true_out(i) - sum(this%layers(this%nlayers)%v%map(:,i)))**2
     enddo
-    ells(nl) = lmax
-    call this%init(ells, cos(x))
-    deallocate(x)
-    deallocate(ells)
-  end subroutine coop_healcnn_connection_default
-  
-  subroutine coop_healcnn_connection_init(this, ells, x)
-    class(coop_healcnn_connection)::this
-    COOP_INT,dimension(:)::ells
-    COOP_REAL,dimension(:):: x
-    COOP_INT::ix, ib, l, LL
-    COOP_REAL,dimension(:),allocatable::Pls,cl1, cl2
-    COOP_REAL::asymp, dis
-    call this%free()
-    this%nb = size(ells)-1
-    this%nx = size(x)
-    allocate(this%x(this%nx), this%lmin(this%nb), this%lmax(this%nb), this%w(this%nb), this%dw(this%nb), this%P(this%nx, this%nb))
-    this%x = x 
-    this%lmax = ells(2:this%nb+1)-1
-    this%lmin = ells(1:this%nb)
-    LL = this%lmax(this%nb)
-    if(LL .lt. 2) call coop_return_error("coop_healcnn_connection_init","does not support lmax < 2", "stop")
-    allocate(Pls(0: LL), cl1(0:LL), cl2(0:LL))
-    do l=1,LL-1
-       cl1(l) = l/(2.d0*l-1.d0)
-       cl2(l) = (2.d0*l+3.d0)/(l+1)
-    enddo
-    this%w = 1.d0
-    this%dw = 0.d0    
-    asymp = 0.2d0 / LL ** 2
-    do ix = 1, this%nx
-       !! calculate Pls(l) = (2l+1) P_l(x)
-       dis = (1.d0-x(ix))/2.d0
-       Pls(0) = 1.d0
-       Pls(1) = 3.d0*x(ix) 
-       if(dis .gt. asymp)then  !!recurrence relation
-          do l = 1, LL-1
-             Pls(l+1) = (x(ix)*Pls(l) - cl1(l)*Pls(l-1))*cl2(l)
-          enddo
-       else  !!use approximation
-          do l = 2, LL
-             Pls(l) = (1.d0 - dis*l*(l+1)*(1.d0-dis*(l-1)*(l+2)/4.d0))*(2*l+1)
-          enddo
+    Err  =  Err/2.d0
+  end function coop_hnn_Err
+
+
+  subroutine coop_hnn_Walk(this, step)
+    class(coop_hnn)::this
+    COOP_REAL::step, s, sumd2, err
+    COOP_INT::i, j
+    call this%fp()
+    err = this%Err()
+    if(err .lt. this%best_Err)then
+       this%best_Err = err
+       do i = 1, this%nlayers-1
+          if(this%layers(i)%nc .gt. 0) then                    
+             this%layers(i)%best_bias = this%layers(i)%bias
+             if(this%layers(i)%nc .gt. 0)  this%layers(i)%c%best_weight = this%layers(i)%c%weight
+          endif
+       enddo
+    elseif(exp(this%best_Err-err)  .lt. coop_random_unit() )then
+       do i = 1, this%nlayers-1
+          if(this%layers(i)%nc .gt. 0) then          
+             this%layers(i)%bias = this%layers(i)%best_bias
+             this%layers(i)%c%weight = this%layers(i)%c%best_weight
+          endif
+       enddo
+       call this%fp()
+    endif
+    call this%bp()
+
+    sumd2 = 0.d0
+    do i = 1, this%nlayers-1
+       if(this%layers(i)%nc .gt. 0)then
+          sumd2 = sumd2 + sum(this%layers(i)%db**2) + sum(this%layers(i)%c%dw**2)
        endif
-       do ib = 1, this%nb
-          this%p(ix, ib) = sum(Pls(this%lmin(ib):this%lmax(ib)))
-       enddo
     enddo
-    deallocate(Pls,cl1,cl2)
-  end subroutine coop_healcnn_connection_init
+    
+    s = step*err/max(sumd2, 1.d-99)
+    
+    do i = 1, this%nlayers-1
+       if(this%layers(i)%nc .gt. 0)then        
+          this%layers(i)%bias = this%layers(i)%bias - s* coop_random_Gaussian() * this%layers(i)%db 
+          this%layers(i)%c%weight = this%layers(i)%c%weight - s* coop_random_Gaussian() * this%layers(i)%c%dw
+       endif
+    enddo
+    
+  end subroutine coop_hnn_Walk
+  
+  
 
-
-  function coop_healcnn_connection_kernel(this, ib, x) result(k)
-    class(coop_healcnn_connection)::this    
-    COOP_REAL::k,x, r
-    COOP_INT::ib, il, ir
-    if(x.lt. this%x(1))then !!too far away, ignore correlation
-       k = 0.d0
-       return
-    endif
-    if(x.ge.this%x(this%nx))then
-       k = this%p(this%nx, ib)
-       return
-    endif
-    il = coop_left_index(this%nx, this%x, x)
-    ir = il + 1
-    r = (this%x(ir)-x)/(this%x(ir)-this%x(il))
-    k = this%p(il, ib)*r + this%p(ir, ib)*(1.d0-r)
-  end function coop_healcnn_connection_kernel
-
+  subroutine coop_hnn_init(this, nmaps, nside, input, delta_ell)
+    class(coop_hnn)::this
+    COOP_INT,dimension(:)::nmaps, nside
+    COOP_INT::i
+    COOP_INT::delta_ell, l
+    type(coop_healpix_maps)::input
+    call this%free()
+    this%nlayers = coop_getdim("hnn_init", size(nmaps), size(nside))
+    allocate(this%layers(this%nlayers))
+    this%nin = nmaps(1)
+    this%nout = nmaps(this%nlayers)
+    allocate(this%true_out(this%nout))
+    do i=1, this%nlayers-1
+       if(nside(i) .eq. nside(i+1))then
+          call this%layers(i)%init(nmaps(i), nmaps(i+1), nside(i))
+       elseif(nmaps(i) .eq. nmaps(i+1) .and. nside(i) .gt. nside(i+1))then
+          call this%layers(i)%init(nmaps(i), nmaps(i+1), nside(i), 0)
+       else
+          call coop_return_error("hnn_init: nside / nmaps do not match")
+       endif
+    enddo
+    call this%layers(this%nlayers)%init(nmaps(this%nlayers), 0, nside(this%nlayers))
+    call this%rand()
+    call input%allocate_alms(lmax = delta_ell * nmaps(1)-1)
+    call input%map2alm(lmax = delta_ell * nmaps(1)-1)
+    call this%layers(1)%v%allocate_alms(lmax = delta_ell * nmaps(1)-1)    
+    do i=1, nmaps(1)
+       do l= (i-1)*delta_ell, i*delta_ell-1
+          this%layers(1)%v%alm(l,0:l, i) = input%alm(l, 0:l, 1)
+       enddo
+       call this%layers(1)%v%alm2map()
+    enddo
+  end subroutine coop_hnn_init
+  
+  
 
 #if ACTIVATE_FUNCTION == 0 
-  function coop_healcnn_activate(x) result(f)
+  function coop_hnn_activate_s(x) result(f)
     COOP_SINGLE::x, f
     f = 1.d0/(1.d0+exp(-x))
-  end function coop_healcnn_activate
+  end function coop_hnn_activate_s
 
-  function coop_healcnn_activate_derv(f) result(df)
+  function coop_hnn_activate_derv_s(f) result(df)
     COOP_SINGLE::f,df
     df  = f*(1.d0-f)
-  end function coop_healcnn_activate_derv
+  end function coop_hnn_activate_derv_s
 
 #elif ACTIVATE_FUNCTION == 1
 
-  function coop_healcnn_activate(x) result(f)
+  function coop_hnn_activate_s(x) result(f)
     COOP_SINGLE::x, f
     f = max(0.d0, x)
-  end function coop_healcnn_activate
+  end function coop_hnn_activate_s
 
-  function coop_healcnn_activate_derv(f) result(df)
+  function coop_hnn_activate_derv_s(f) result(df)
     COOP_SINGLE::f,df
     if(f.gt.0.d0)then
        df = 1.d0
     else
        df = 0.d0
     endif
-  end function coop_healcnn_activate_derv
+  end function coop_hnn_activate_derv_s
 
 #elif ACTIVATE_FUNCTION == 2
 
-  function coop_healcnn_activate(x) result(f)
+  function coop_hnn_activate_s(x) result(f)
     COOP_SINGLE::x, f
     f = tanh(x)
-  end function coop_healcnn_activate
+  end function coop_hnn_activate_s
 
-  function coop_healcnn_activate_derv(f) result(df)
+  function coop_hnn_activate_derv_s(f) result(df)
     COOP_SINGLE::f,df
     df = 1.d0-f**2
-  end function coop_healcnn_activate_derv
+  end function coop_hnn_activate_derv_s
 
 #elif ACTIVATE_FUNCTION == 3
 
-  function coop_healcnn_activate(x) result(f)
+  function coop_hnn_activate_s(x) result(f)
     COOP_SINGLE::x, f
     if(x.gt.0.d0)then
        f = x
     else
        f = x/10.d0
     endif
-  end function coop_healcnn_activate
+  end function coop_hnn_activate_s
 
-  function coop_healcnn_activate_derv(f) result(df)
+  function coop_hnn_activate_derv_s(f) result(df)
     COOP_SINGLE::f,df
     if(f.gt.0.d0)then
        df = 1.d0
     else
        df = 0.1d0
     endif
-  end function coop_healcnn_activate_derv
+  end function coop_hnn_activate_derv_s
   
-#endif  
+#endif
 
+  function coop_hnn_activate_v(x) result(f)
+    COOP_SINGLE,dimension(:)::x
+    COOP_SINGLE:: f(size(x))
+    COOP_INT::i, n
+    n = size(x)
+    !$omp parallel do
+    do i=1, n
+       f(i) = coop_hnn_activate_s(x(i))
+    enddo
+    !$omp end parallel do
+  end function coop_hnn_activate_v
+
+  function coop_hnn_activate_derv_v(f) result(df)
+    COOP_SINGLE,dimension(:)::f
+    COOP_SINGLE:: df(size(f))
+    COOP_INT::i, n
+    n = size(f)
+    !$omp parallel do
+    do i=1, n
+       df(i) = coop_hnn_activate_derv_s(f(i))
+    enddo
+    !$omp end parallel do
+  end function coop_hnn_activate_derv_v
+
+  function coop_hnn_activate_vv(x) result(f)
+    COOP_SINGLE,dimension(:,:)::x
+    COOP_SINGLE:: f(size(x,1), size(x, 2))
+    COOP_INT::i, j,  n1, n2
+    n1 = size(x, 1)
+    n2 = size(x, 2)
+    !$omp parallel do private(i, j)
+    do j=1, n2
+       do i=1, n1
+          f(i, j) = coop_hnn_activate_s(x(i, j))
+       enddo
+    enddo
+    !$omp end parallel do
+  end function coop_hnn_activate_vv
+
+  function coop_hnn_activate_derv_vv(f) result(df)
+    COOP_SINGLE,dimension(:,:)::f
+    COOP_SINGLE:: df(size(f,1), size(f,2))
+    COOP_INT::i,j, n1, n2
+    n1 = size(f,1)
+    n2 = size(f,2)
+    !$omp parallel do private(i, j)
+    do j=1, n2
+       do i=1, n1
+          df(i, j) = coop_hnn_activate_derv_s(f(i, j))
+       enddo
+    enddo
+    !$omp end parallel do
+  end function coop_hnn_activate_derv_vv
+  
   !!==============================
-  
-  
-end module coop_healcnn_mod
 
+
+  
+end module coop_hnn_mod
+    
 
