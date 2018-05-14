@@ -545,11 +545,11 @@ contains
 
   subroutine coop_mcmc_chain_export_stats(mc, output)
     class(coop_mcmc_chain) mc
-    COOP_REAL, parameter::lnAs_base = log(2.3d-9)
+    COOP_SINGLE,parameter::spec_ymin = 0.35
     COOP_INT,parameter::nk = 71
     COOP_INT,parameter::distlss = 13893.
     COOP_INT, parameter::num_1sigma_trajs = 50
-    COOP_INT, parameter::num_samples_to_get_mean = 2500
+    COOP_INT, parameter::num_samples_to_get_mean = 3000
     COOP_INT,parameter::lmin = coop_pp_lmin, lmax = coop_pp_lmax, num_cls_samples = 50
     COOP_REAL,parameter::standard_ns = 0.967d0
     COOP_REAL,parameter::low_ell_cut = 50
@@ -564,7 +564,7 @@ contains
     COOP_SINGLE total_mult, cltraj_weight, x(mc%nb), ytop
     logical first_1sigma, inflation_consistency, do_dcl
     COOP_REAL  norm, lnkmin, lnkmax, cltt, errup, errdown, mean_lnAs, hubble, dns_trial
-    COOP_REAL  lnk(nk), kMpc(nk), ps(nk), pt(nk), lnpsmean(nk), lnptmean(nk), lnpscov(nk, nk), lnps(nk), lnpt(nk),  mineig, clnps(mypp_n), clnpt(mypp_n), lnps_bounds(-2:2,nk), standard_lnps(nk), lnps_samples(num_samples_to_get_mean, nk), lnpt_samples(num_samples_to_get_mean, nk), mult_samples(num_samples_to_get_mean), Cls_samples(lmin:lmax, num_cls_samples), cls_mean(lmin:lmax), cls_best(lmin:lmax)
+    COOP_REAL  lnk(nk), kMpc(nk), ps(nk), pt(nk), lnpsmean(nk), lnptmean(nk), lnpscov(nk, nk), lnps(nk), lnpt(nk),  mineig, clnps(mypp_n), clnpt(mypp_n), lnps_bounds(-2:2,nk), lnpt_bounds(0:2,nk), standard_lnps(nk), lnps_samples(num_samples_to_get_mean, nk), lnpt_samples(num_samples_to_get_mean, nk), mult_samples(num_samples_to_get_mean), Cls_samples(lmin:lmax, num_cls_samples), cls_mean(lmin:lmax), cls_best(lmin:lmax)
     COOP_REAL, dimension(:,:),allocatable::pcamat
     COOP_REAL, dimension(:),allocatable::eig, ipca
     COOP_REAL:: ps_trajs(nk, num_1sigma_trajs), pt_trajs(nk, num_1sigma_trajs) 
@@ -595,7 +595,6 @@ contains
        clnps = 0
        clnpt = 0
        lnpscov = 0
-
        if(mc%index_r.eq.0)then
           call mypp_setup_pp(As = exp(dble(mc%Params(1, mc%index_logA)))*1.d-10, ns = mc%default_ns, nknots = mypp_nknots, dlnps = dble(mc%Params(1, mc%index_pp: mc%index_pp+mypp_nknots-1)), r = mc%default_r )
        else
@@ -615,7 +614,7 @@ contains
        kMpc = exp(lnk)
        standard_lnps = mean_lnAs+(standard_ns -1.)*(lnk-mypp_lnkpiv)
 
-       call fig_spec%init(xlabel="$ k [{\rm Mpc}^{-1}]$", ylabel = "$10^{10}\mathcal{P}_{{\cal R},\mathrm{t}}$", xlog=.true., ylog = .true., xmin = real(exp(mypp_lnkmin-0.08)), xmax = real(exp(mypp_lnkmax + 0.08)), ymin = 1., ymax = 250., doclip = .true.)
+       call fig_spec%init(xlabel="$ k [{\rm Mpc}^{-1}]$", ylabel = "$10^{10}\mathcal{P}_{{\cal R},\mathrm{t}}$", xlog=.true., ylog = .true., xmin = real(exp(mypp_lnkmin-0.08)), xmax = real(exp(mypp_lnkmax + 0.08)), ymin = spec_ymin, ymax = 250., doclip = .true.)
        call coop_asy_topaxis(fig_spec, xmin = real(exp(mypp_lnkmin-0.08))*distlss,  xmax = real(exp(mypp_lnkmax + 0.08))*distlss, islog = .true. , label = "$\ell_k\equiv  k D_{\rm rec}$")
        call fig_pot%init(xlabel="$(\phi - \phi_{\rm pivot})/M_p$", ylabel = "$\ln (V/V_{\rm pivot})$", xmin = -0.8, xmax = 0.5, ymin = -0.06, ymax = 0.08, doclip = .true.)
        call fig_eps%init(xlabel = "$ k [{\rm Mpc}^{-1}]$", ylabel = "$\epsilon$", xlog = .true. ,  xmin = real(exp(mypp_lnkmin-0.08)), xmax = real(exp(mypp_lnkmax + 0.08)), ymin = -0.005, ymax = 0.03, doclip = .true.)
@@ -696,17 +695,26 @@ contains
        enddo
        mypp_lnps = clnps
        mypp_lnpt = clnpt
+
+       
        call mypp_get_potential()
        do ik = 1, nk
           call coop_get_bounds(lnps_samples(:, ik), (/ 0.023d0, 0.1585d0, 0.5d0, 0.8415d0, 0.977d0 /), lnps_bounds(-2:2, ik), mult_samples)
+          call coop_get_bounds(lnpt_samples(:, ik), (/ 0.683d0, 0.954d0 /), lnpt_bounds(1:2, ik), mult_samples)
        enddo
-       call fig_spec%band(kmpc, 1.d10*exp(lnps_bounds(-2,:)), 1.d10*exp(lnps_bounds(2,:)), colorfill = trim(coop_asy_gray_color(0.65)), linecolor="invisible")
-       call fig_spec%band(kmpc, 1.d10*exp(lnps_bounds(-1,:)), 1.d10*exp(lnps_bounds(1,:)), colorfill = trim(coop_asy_gray_color(0.4)), linecolor="invisible")
+       lnpt_bounds(0,:) = spec_ymin
+       call fig_spec%band(kmpc, 1.d10*exp(lnps_bounds(-2,:)), 1.d10*exp(lnps_bounds(2,:)), colorfill = trim(coop_asy_gray_color(0.67)), linecolor="invisible")
+       call fig_spec%band(kmpc, 1.d10*exp(lnps_bounds(-1,:)), 1.d10*exp(lnps_bounds(1,:)), colorfill = trim(coop_asy_gray_color(0.42)), linecolor="invisible")
+
+       call fig_spec%band(kmpc, lnpt_bounds(0,:), 1.d10*exp(lnpt_bounds(2,:)), colorfill = trim(coop_asy_gray_color(0.67)), linecolor="invisible")
+       call fig_spec%band(kmpc, lnpt_bounds(0,:), 1.d10*exp(lnpt_bounds(1,:)), colorfill = trim(coop_asy_gray_color(0.42)), linecolor="invisible")
+       
+       
        call fig_spec%curve(kmpc, ps_trajs(:,1), color="HEX:006FED", linetype="dashed", linewidth=0.5,legend="$\mathcal{P}_{\cal R}$ samples")
-       call fig_spec%curve(kmpc, pt_trajs(:, 1), color="HEX:8CD3F5", linetype="dotted", linewidth=1., legend="$\mathcal{P}_{\mathrm{t}}$ samples")       
+       call fig_spec%curve(kmpc, pt_trajs(:, 1), color="HEX:8CD3F5", linetype="dotted", linewidth=0.8, legend="$\mathcal{P}_{\mathrm{t}}$ samples")       
        do j=2, num_trajs
           call fig_spec%curve(kmpc, ps_trajs(:,j), color="HEX:006FED", linetype="dashed", linewidth=0.5)
-          call fig_spec%curve(kmpc, pt_trajs(:, j), color="HEX:8CD3F5", linetype="dotted", linewidth=1.)
+          call fig_spec%curve(kmpc, pt_trajs(:, j), color="HEX:8CD3F5", linetype="dotted", linewidth=0.8)
        enddo
        call fig_spec%curve(kmpc, ps, color = "red", linetype = "solid", linewidth = 1.5, legend="mean $\mathcal{P}_{\cal R}$")
        call fig_spec%curve(kmpc, pt, color = "violet", linetype = "solid", linewidth = 1.2, legend="mean $\mathcal{P}_{\mathrm{t}}$")
@@ -719,7 +727,7 @@ contains
        call fig_spec%curve(kMpc, exp(standard_lnps), color = "black", linewidth=1.2, legend="$m^2\phi^2$ model $\mathcal{P}_{\cal R}$")
        call fig_spec%curve(kMpc, exp(mean_lnAs - 0.01625*lnk)*0.13, color = "cyan", linewidth=1.2, legend="$m^2\phi^2$ model $\mathcal{P}_{\mathrm{t}}$")
        if(mypp_nknots .gt. 4)then
-          ps(1:mypp_nknots+1) = 1.3
+          ps(1:mypp_nknots+1) = 0.45
           call coop_asy_dots(fig_spec, k_knots, ps(1:mypp_nknots+1), "black", "$\Delta$")
           ps(1:mypp_nknots+1) = -0.003
           call coop_asy_dots(fig_eps, k_knots, ps(1:mypp_nknots+1), "black", "$\Delta$")
@@ -732,7 +740,7 @@ contains
        call fig_pot%label( COOP_STR_OF(mypp_nknots+1)//" knots", 0.1, 0.2)
        if(trim(mc%datasets) .eq. "")then
           if(mc%index_of("r") .ne. 0)then
-             call coop_asy_label(fig_spec,  "free $r$", 0.012, 8., "black")
+             call coop_asy_label(fig_spec,  "BK14 + lowl + plik TT + lensing + BAO + SN + HST", 0.012, 6., "black")
           else
              rval = trim(mc%inputparams%value("param[r]"))
              if(trim(rval) .ne. "")then

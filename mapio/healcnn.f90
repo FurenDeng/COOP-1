@@ -5,7 +5,7 @@ module coop_hnn_mod
   
 #include "constants.h"  
 
-#define ACTIVATE_FUNCTION 3
+#define ACTIVATE_FUNCTION 2
   !! 0 = sigmoid
   !! 1 = ReLU (Rectified Linear Unit)
   !! 2 = tanh
@@ -284,9 +284,13 @@ contains
     s = step*err/max(sumd2, 1.d-99)
     
     do i = 1, this%nlayers-1
-       if(this%layers(i)%nc .gt. 0)then        
-          this%layers(i)%bias = this%layers(i)%bias - s* coop_random_Gaussian() * this%layers(i)%db 
-          this%layers(i)%c%weight = this%layers(i)%c%weight - s* coop_random_Gaussian() * this%layers(i)%c%dw
+       if(this%layers(i)%nc .gt. 0)then
+          do j=1, this%layers(i)%nout
+             this%layers(i)%bias(j) = this%layers(i)%bias(j) - s* coop_random_Gaussian() * this%layers(i)%db(j)
+          enddo
+          do j = 1, this%layers(i)%nc
+             this%layers(i)%c(j)%weight = this%layers(i)%c(j)%weight - s* coop_random_Gaussian() * this%layers(i)%c(j)%dw
+          enddo
        endif
     enddo
     
