@@ -740,7 +740,7 @@ contains
        call fig_pot%label( COOP_STR_OF(mypp_nknots+1)//" knots", 0.1, 0.2)
        if(trim(mc%datasets) .eq. "")then
           if(mc%index_of("r") .ne. 0)then
-             call coop_asy_label(fig_spec,  "BK14 + lowl + plik TT + lensing + BAO + SN + HST", 0.012, 6., "black")
+             call coop_asy_label(fig_spec,  "BK15 + lowl + simall + plik TTTEEE + lensing", 0.013, 6., "black")
           else
              rval = trim(mc%inputparams%value("param[r]"))
              if(trim(rval) .ne. "")then
