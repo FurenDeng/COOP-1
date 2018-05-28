@@ -21,20 +21,20 @@ program getdist
   endif
   tmpstr = coop_InputArgs(5)
   if(trim(tmpstr).eq.'')then
-     perc = 30
+     perc = 20
   else
      read(tmpstr, *) perc
   endif
 
-  call system("cp "//trim(root1)//".inputparams "//trim(root1)//".inputparams")
-  call system("cp "//trim(root1)//".ranges "//trim(root1)//".ranges")
-  call system("cp "//trim(root1)//".paramnames "//trim(root1)//".paramnames")
-  call system("cp "//trim(root1)//".likelihoods "//trim(root1)//".likelihoods")
-  call system("cp "//trim(root1)//".converge_stat "//trim(root1)//".converge_stat")     
+  call system("cp "//trim(root1)//".inputparams "//trim(root_out)//".inputparams")
+  call system("cp "//trim(root1)//".ranges "//trim(root_out)//".ranges")
+  call system("cp "//trim(root1)//".paramnames "//trim(root_out)//".paramnames")
+  call system("cp "//trim(root1)//".likelihoods "//trim(root_out)//".likelihoods")
+
   
   do i=1, ind
      row2 = coop_file_numlines(trim(root2)//"_"//COOP_STR_OF(i)//".txt")
-     call system("cp "//trim(root1)//"_"//COOP_STR_OF(i)//".txt "//trim(root1)//"_"//COOP_STR_OF(i)//".txt")
+     call system("cp "//trim(root1)//"_"//COOP_STR_OF(i)//".txt "//trim(root_out)//"_"//COOP_STR_OF(i)//".txt")
      call fp1%open(trim(root_out)//"_"//COOP_STR_OF(i)//".txt", "a")
      call fp2%open(trim(root2)//"_"//COOP_STR_OF(i)//".txt")
      do j=1, row2*perc/100
