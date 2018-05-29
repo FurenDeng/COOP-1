@@ -569,7 +569,7 @@ contains
     COOP_SINGLE total_mult, cltraj_weight, x(mc%nb), ytop
     logical first_1sigma, inflation_consistency, do_dcl
     COOP_REAL  norm, lnkmin, lnkmax, cltt, errup, errdown, mean_lnAs, hubble, dns_trial
-    COOP_REAL  lnk(nk), kMpc(nk), ps(nk), pt(nk), lnpsmean(nk), lnptmean(nk), lnpscov(nk, nk), lnps(nk), lnpt(nk),  mineig, clnps(mypp_n), clnpt(mypp_n), lnps_bounds(-2:2,nk), lnpt_bounds(0:2,nk), standard_lnps(nk), lnps_samples(num_samples_to_get_mean, nk), lnpt_samples(num_samples_to_get_mean, nk), mult_samples(num_samples_to_get_mean), Cls_samples(lmin:lmax, num_cls_samples), cls_mean(lmin:lmax), cls_best(lmin:lmax)
+    COOP_REAL  lnk(nk), kMpc(nk), ps(nk), pt(nk), lnpsmean(nk), lnptmean(nk), lnpscov(nk, nk), lnps(nk), lnpt(nk),  mineig, clnps(mypp_n), clnpt(mypp_n), lnps_bounds(-2:2,nk), lnpt_bounds(0:2,nk), eps_bounds(0:2,nk),  standard_lnps(nk), eps_samples(num_samples_to_get_mean, nk), phi_samples(num_samples_to_get_mean, nk), lnV_samples(num_samples_to_get_mean, nk), lnps_samples(num_samples_to_get_mean, nk), lnpt_samples(num_samples_to_get_mean, nk), mult_samples(num_samples_to_get_mean), eps_bound(0:2, nk)
     COOP_REAL, dimension(:,:),allocatable::pcamat
     COOP_REAL, dimension(:),allocatable::eig, ipca
     COOP_REAL:: ps_trajs(nk, num_1sigma_trajs), pt_trajs(nk, num_1sigma_trajs) 
@@ -641,10 +641,13 @@ contains
           else
              call mypp_setup_pp(As = exp(dble(mc%Params(j, mc%index_logA)))*1.d-10, ns = mc%default_ns, nknots = mypp_nknots, dlnps = dble(mc%Params(j, mc%index_pp: mc%index_pp+mypp_nknots-1)), r = dble(mc%params(j, mc%index_r)))
           endif
+          call mypp_get_potential()
+          
           !$omp parallel do 
           do ik = 1, nk
              lnps_samples(isam, ik) = mypp_primordial_lnps(kMpc(ik))
              lnpt_samples(isam, ik) = mypp_primordial_lnpt(kMpc(ik))
+             call mypp_get_eps_phi_lnV(kMpc(ik), eps_samples(isam, ik), phi_samples(isam, ik), lnV_samples(isam, ik))
           enddo
           !$omp end parallel do
           mult_samples(isam) = mc%mult(j)
@@ -662,7 +665,6 @@ contains
              enddo
           endif
           if(num_trajs .lt. num_1sigma_trajs .and. mc%like(j) .lt. mc%likecut(1))then
-             call mypp_get_potential()
              write(fp%unit, "("//trim(coop_num2str(mc%np))//"G14.5)") mc%params(j, :)
              num_trajs = num_trajs+1
              ps = 1.e10*exp(lnps_samples(isam, :))
@@ -706,8 +708,10 @@ contains
        do ik = 1, nk
           call coop_get_bounds(lnps_samples(:, ik), (/ 0.023d0, 0.1585d0, 0.5d0, 0.8415d0, 0.977d0 /), lnps_bounds(-2:2, ik), mult_samples)
           call coop_get_bounds(lnpt_samples(:, ik), (/ 0.683d0, 0.954d0 /), lnpt_bounds(1:2, ik), mult_samples)
+          call coop_get_bounds(eps_samples(:, ik), (/ 0.683d0, 0.954d0 /), eps_bounds(1:2, ik), mult_samples)
        enddo
        lnpt_bounds(0,:) = spec_ymin
+       eps_bounds(0, :) = 0.
        call fig_spec%band(kmpc, 1.d10*exp(lnps_bounds(-2,:)), 1.d10*exp(lnps_bounds(2,:)), colorfill = trim(coop_asy_gray_color(0.67)), linecolor="invisible")
        call fig_spec%band(kmpc, 1.d10*exp(lnps_bounds(-1,:)), 1.d10*exp(lnps_bounds(1,:)), colorfill = trim(coop_asy_gray_color(0.42)), linecolor="invisible")
 
@@ -724,6 +728,9 @@ contains
        call fig_spec%curve(kmpc, ps, color = "red", linetype = "solid", linewidth = 1.5, legend="mean $\mathcal{P}_{\cal R}$")
        call fig_spec%curve(kmpc, pt, color = "violet", linetype = "solid", linewidth = 1.2, legend="mean $\mathcal{P}_{\mathrm{t}}$")
 
+       call fig_eps%band(kmpc, eps_bounds(0,:),  eps_bound(2, :), colorfill = trim(coop_asy_gray_color(0.67)), linecolor="invisible")
+       call fig_eps%band(kmpc, eps_bounds(0,:), eps_bounds(1, :),  colorfill = trim(coop_asy_gray_color(0.67)), linecolor="invisible")       
+       
        call fig_pot%interpolate_curve(xraw = mypp_phi, yraw = mypp_lnV-mypp_lnV(mypp_ipivot), interpolate="LinearLinear", color = "red", linetype = "solid", linewidth = 1.5, legend="mean")
        call fig_eps%interpolate_curve(xraw = exp(mypp_lnk), yraw = exp(mypp_lneps), interpolate = "LogLinear", color = "red", linetype = "solid", linewidth = 1.5, legend="mean")
 

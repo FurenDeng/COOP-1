@@ -15,7 +15,7 @@ module camb_mypp
   real*8::mypp_lnkmax = -0.3d0
   integer::mypp_model = 0, mypp_nleft = 0, mypp_nright = 0
   real*8,dimension(mypp_n)::mypp_lnk, mypp_lnps, mypp_lnps2, mypp_lnpt, mypp_lnpt2, mypp_lneps, mypp_lnV, mypp_phi, mypp_lnH
-
+  real*8::mypp_dlnk
 !!  character(LEN=1024)::cosmomc_paramnames = ''
 
 contains
@@ -183,9 +183,9 @@ contains
     real*8,optional::r, nt
     integer::nknots
     real*8::dlnps(nknots)
-    real*8  dlnk
     real*8,dimension(:),allocatable::lnk, lnps, lnps2
     integer  i
+    real*8 dlnk
     if(nknots .lt. 5) stop "You need at least 5 knots for scan_spline mode"
     mypp_nknots = nknots
     mypp_nleft = nint(nknots* (mypp_lnkpiv-mypp_lnkmin) / (-mypp_lnkmin))
@@ -260,6 +260,19 @@ contains
     endif
   end function mypp_primordial_pt
 
+  subroutine mypp_get_eps_phi_lnV(kMpc, eps, phi, lnV)
+    real*8 kMpc, eps, phi, lnV
+    real*8 lnk, r
+    integer il, ir
+    lnk = log(kMpc)
+    r= (lnk - mypp_lnkmin)/mypp_dlnk+1.d0
+    il = min(max(floor(r), 1), mypp_n -1)
+    ir = il + 1
+    eps = exp(mypp_lneps(il)*(ir - r) + mypp_lneps(ir)*(r-il))
+    phi = mypp_phi(il)*(ir-r) + mypp_phi(ir)*(r-il)
+    lnV = mypp_lnV(il)*(ir-r) + mypp_lnV(ir)*(r-il)
+  end subroutine mypp_get_eps_phi_lnV
+  
   subroutine mypp_get_potential()
     integer::iloc(1:1)
     integer i
@@ -269,6 +282,7 @@ contains
     iloc = minloc(abs(mypp_lnk - mypp_lnkpiv))
     mypp_ipivot = iloc(1)
     dlnk = mypp_lnk(2)-mypp_lnk(1)
+    mypp_dlnk = dlnk
     fourdlnk = dlnk*4.d0
     do i=2, mypp_n - 1
        delta(i) = (mypp_lnps(i-1)-mypp_lnps(i+1))/fourdlnk
