@@ -25,6 +25,7 @@ module coop_statchains_mod
      COOP_INT::np_used = 0
      COOP_INT::np = 0
      COOP_INT::nprim = 0
+     COOP_INT::nwant = 0
      COOP_SINGLE:: bestlike, worstlike, totalmult, likecut(mcmc_stat_num_cls)
      COOP_INT ibest, iworst
      COOP_SHORT_STRING,dimension(:),allocatable::name, simplename
@@ -35,7 +36,7 @@ module coop_statchains_mod
      logical,dimension(:),allocatable::vary, left_is_tail, right_is_tail
      COOP_INT,dimension(:),allocatable::map2used
      COOP_SINGLE,dimension(:,:),allocatable::covmat, corrmat
-     COOP_INT,dimension(:),allocatable::used, prim  !!used(i): full-index of the i-th used parameter;  prim(i): used-index of the i-th used primary parameter
+     COOP_INT,dimension(:),allocatable::used, prim, want  !!used(i): full-index of the i-th used parameter;  prim(i): used-index of the i-th used primary parameter
 
 
      COOP_INT np_pca
@@ -454,10 +455,14 @@ contains
     enddo
     mc%np_used = count(mc%vary)
     mc%nprim = count(mc%vary .and. .not. mc%derived)
-    if(allocated(mc%prim))deallocate(mc%prim)
+
+    COOP_DEALLOC(mc%prim)
+    COOP_DEALLOC(mc%used)
+    COOP_DEALLOC(mc%corrmat)
+    
     mc%np_pca = 0 !!default
-    if(allocated(mc%used))deallocate(mc%used)
-    if(allocated(mc%corrmat))deallocate(mc%corrmat)
+
+
     allocate(mc%used(mc%np_used), mc%corrmat(mc%np_used, mc%np_used), mc%prim(mc%nprim))
     i = 1
     j=1
@@ -558,7 +563,7 @@ contains
     COOP_UNKNOWN_STRING output
     COOP_SHORT_STRING::rval=""
     type(coop_file)::fcl
-    type(coop_asy) fp, fig_spec, fig_pot, fig_eps !, fig_cls, fig_dcls
+    type(coop_asy) fp, fig_spec, fig_pot, fig_eps
     type(coop_asy_path) path    
     COOP_INT i , ip, j,  j2, k, ik, ik1,  ik2, ndof, l, junk, num_params,  pp_location, icontour, numpp, num_trajs, ind_lowk, isam, index_H, ind_highk
     COOP_SINGLE total_mult, cltraj_weight, x(mc%nb), ytop
@@ -732,11 +737,6 @@ contains
           ps(1:mypp_nknots+1) = -0.003
           call coop_asy_dots(fig_eps, k_knots, ps(1:mypp_nknots+1), "black", "$\Delta$")
        endif
-!       if(coop_postprocess_do_cls) call coop_asy_legend(fig_cls, 4., 5000., 1, box = .false.)
-!!$       if(do_dcl)then
-!!$          call coop_asy_legend(fig_dcls, 45., 420., 1, box = .false.)
-!!$          call fig_dcls%close()
-!!$       endif
        call fig_pot%label( COOP_STR_OF(mypp_nknots+1)//" knots", 0.06, 0.2)
        if(trim(mc%datasets) .eq. "")then
           if(mc%index_of("r") .ne. 0)then
@@ -753,43 +753,40 @@ contains
           call fig_eps%label(trim(mc%datasets), 0.06, 0.92)         
        endif
        call coop_asy_legend_advance(fig_spec, real(exp(lnkmin + 1.)), 170., "invisible", 0., 0., 0.8, 0.9, 0.9, 2)
-!       call coop_asy_legend(fig_pot, -0.05, 0.072, 1, box=.false.)
-!       call coop_asy_legend(fig_eps, real(exp(mypp_lnkmin +2.)), 0.024, 1, box=.false.)              
        call coop_asy_legend_advance(fig_pot, -0.05, 0.072, "invisible", 0., 0., 0.8, 0.9, 0.9, 1)
        call coop_asy_legend_advance(fig_eps,  real(exp(mypp_lnkmin +2.)), 0.024, "invisible", 0., 0., 0.8, 0.9, 0.9, 1)       
        call fig_spec%close()
-!       call fig_cls%close()
        call fig_eps%close()
        call fig_pot%close()
 
 
-       if(mypp_nknots .gt. 4)then
-          lnps_mean_knots = lnps_mean_knots /total_mult
-          cov_knots = cov_knots/total_mult
-          do ik=0, mypp_nknots
-             do ik2 = ik, mypp_nknots
-                cov_knots(ik, ik2) = cov_knots(ik, ik2) - lnps_mean_knots(ik)*lnps_mean_knots(ik2)
-                cov_knots(ik2, ik) = cov_knots(ik, ik2)
-             enddo
-          enddo
-          ind_lowk = 0
-          do while(k_knots(ind_lowk+1).lt. low_k_cut)
-             ind_lowk = ind_lowk + 1
-             if(ind_lowk .ge. mypp_nknots) stop "low_k_cut not in proper range"
-          enddo
-          allocate(cov_lowk(0:ind_lowk, 0:ind_lowk), cov_highk(mypp_nknots - ind_lowk, mypp_nknots - ind_lowk))
-          cov_lowk = cov_knots(0:ind_lowk, 0:ind_lowk)
-          cov_highk = cov_knots(ind_lowk+1:mypp_nknots, ind_lowk+1:mypp_nknots)
-          
-          call coop_sympos_inverse(ind_lowk+1, ind_lowk+1, cov_lowk)
-          call coop_sympos_inverse(mypp_nknots - ind_lowk, mypp_nknots - ind_lowk, cov_highk)
-          lnps_standard_knots = lnps_standard_knots - lnps_mean_knots
-          write(*,*) "number of lowk knots =", ind_lowk+1
-          write(*,*) "number of highk knots =", mypp_nknots - ind_lowk 
-          if(ind_lowk.gt.0)write(*,*) "chi_LCDM^2(low k) per dof = ", dot_product(lnps_standard_knots(0:ind_lowk), matmul(cov_lowk, lnps_standard_knots(0:ind_lowk)))/(ind_lowk+1)
-          if(mypp_nknots-ind_lowk.gt.0)write(*,*) "chi_LCDM^2(high k) per dof = ", dot_product(lnps_standard_knots(ind_lowk+1:mypp_nknots), matmul(cov_highk, lnps_standard_knots(ind_lowk+1:mypp_nknots))) /(mypp_nknots - ind_lowk)
-          deallocate(cov_lowk, cov_highk)
-       endif
+!!$       if(mypp_nknots .gt. 4)then
+!!$          lnps_mean_knots = lnps_mean_knots /total_mult
+!!$          cov_knots = cov_knots/total_mult
+!!$          do ik=0, mypp_nknots
+!!$             do ik2 = ik, mypp_nknots
+!!$                cov_knots(ik, ik2) = cov_knots(ik, ik2) - lnps_mean_knots(ik)*lnps_mean_knots(ik2)
+!!$                cov_knots(ik2, ik) = cov_knots(ik, ik2)
+!!$             enddo
+!!$          enddo
+!!$          ind_lowk = 0
+!!$          do while(k_knots(ind_lowk+1).lt. low_k_cut)
+!!$             ind_lowk = ind_lowk + 1
+!!$             if(ind_lowk .ge. mypp_nknots) stop "low_k_cut not in proper range"
+!!$          enddo
+!!$          allocate(cov_lowk(0:ind_lowk, 0:ind_lowk), cov_highk(mypp_nknots - ind_lowk, mypp_nknots - ind_lowk))
+!!$          cov_lowk = cov_knots(0:ind_lowk, 0:ind_lowk)
+!!$          cov_highk = cov_knots(ind_lowk+1:mypp_nknots, ind_lowk+1:mypp_nknots)
+!!$          
+!!$          call coop_sympos_inverse(ind_lowk+1, ind_lowk+1, cov_lowk)
+!!$          call coop_sympos_inverse(mypp_nknots - ind_lowk, mypp_nknots - ind_lowk, cov_highk)
+!!$          lnps_standard_knots = lnps_standard_knots - lnps_mean_knots
+!!$          write(*,*) "number of lowk knots =", ind_lowk+1
+!!$          write(*,*) "number of highk knots =", mypp_nknots - ind_lowk 
+!!$          if(ind_lowk.gt.0)write(*,*) "chi_LCDM^2(low k) per dof = ", dot_product(lnps_standard_knots(0:ind_lowk), matmul(cov_lowk, lnps_standard_knots(0:ind_lowk)))/(ind_lowk+1)
+!!$          if(mypp_nknots-ind_lowk.gt.0)write(*,*) "chi_LCDM^2(high k) per dof = ", dot_product(lnps_standard_knots(ind_lowk+1:mypp_nknots), matmul(cov_highk, lnps_standard_knots(ind_lowk+1:mypp_nknots))) /(mypp_nknots - ind_lowk)
+!!$          deallocate(cov_lowk, cov_highk)
+!!$       endif
 
        !!now do eigen modes    
        do ik=1, nk
@@ -957,8 +954,15 @@ contains
     Write(fp%unit,"(A)")"\begin{tabular}{cc}"
     Write(fp%unit,"(A)")"\hline"
     Write(fp%unit,"(a)")"\hline"
+
+    mc%nwant = count(mc%want_1d_output)
+    COOP_DEALLOC(mc%want)
+    allocate(mc%want(mc%nwant))
+    i=0
     do ip = 1, mc%np_used
        if(mc%want_1d_output(ip))then
+          i = i+1
+          mc%want(i) = ip
           write(fp%unit, "(A)") trim(mc%label(mc%used(ip)))//" & "//trim(latex_range(mc%base(mc%used(ip)), mc%lowsig(:, mc%used(ip)), mc%upsig(:, mc%used(ip))))//" \\ "
           Write(fp%unit,"(a)")"\hline"
        endif
@@ -980,26 +984,26 @@ contains
     call fp%close()
 
 
-
-    allnames = "# "
-    do ip=1, mc%nprim
-       allnames = trim(allnames)//" "//trim(mc%name(mc%prim(ip)))
-    enddo
-    !!scaled covmat (*0.3)
-    call fp%open(trim(mc%output)//".s3cov", "w")    
-    write(fp%unit, "(A)") trim(allnames)
-    call coop_write_matrix(fp%unit, mc%covmat(mc%prim, mc%prim)*0.3, mc%nprim, mc%nprim)
-    call fp%close()
-    !!scaled covmat (*0.2)
-    call fp%open(trim(mc%output)//".s2cov", "w")    
-    write(fp%unit, "(A)") trim(allnames)
-    call coop_write_matrix(fp%unit, mc%covmat(mc%prim, mc%prim)*0.2, mc%nprim, mc%nprim)
-    call fp%close()
-    !!scaled covmat (*0.1)
-    call fp%open(trim(mc%output)//".s1cov", "w")    
-    write(fp%unit, "(A)") trim(allnames)
-    call coop_write_matrix(fp%unit, mc%covmat(mc%prim, mc%prim)*0.1, mc%nprim, mc%nprim)
-    call fp%close()
+!!$
+!!$    allnames = "# "
+!!$    do ip=1, mc%nprim
+!!$       allnames = trim(allnames)//" "//trim(mc%name(mc%prim(ip)))
+!!$    enddo
+!!$    !!scaled covmat (*0.3)
+!!$    call fp%open(trim(mc%output)//".s3cov", "w")    
+!!$    write(fp%unit, "(A)") trim(allnames)
+!!$    call coop_write_matrix(fp%unit, mc%covmat(mc%prim, mc%prim)*0.3, mc%nprim, mc%nprim)
+!!$    call fp%close()
+!!$    !!scaled covmat (*0.2)
+!!$    call fp%open(trim(mc%output)//".s2cov", "w")    
+!!$    write(fp%unit, "(A)") trim(allnames)
+!!$    call coop_write_matrix(fp%unit, mc%covmat(mc%prim, mc%prim)*0.2, mc%nprim, mc%nprim)
+!!$    call fp%close()
+!!$    !!scaled covmat (*0.1)
+!!$    call fp%open(trim(mc%output)//".s1cov", "w")    
+!!$    write(fp%unit, "(A)") trim(allnames)
+!!$    call coop_write_matrix(fp%unit, mc%covmat(mc%prim, mc%prim)*0.1, mc%nprim, mc%nprim)
+!!$    call fp%close()
 
     
     allnames = "# "
@@ -1011,10 +1015,27 @@ contains
     call coop_write_matrix(fp%unit, mc%covmat(mc%used, mc%used), mc%np_used, mc%np_used)
     call fp%close()
 
+
+
+
+    call fp%open(trim(mc%output)//"_corr.txt")
+    call fp%init(xlabel="", ylabel="", width=10., height=8., xmin=0., xmax=real(mc%nwant), ymin=0., ymax=real(mc%nwant), nxticks=-1, nyticks=-1)
+    do i=1, mc%np_used
+       if(mc%want_1d_output(i))then
+          call fp%text(mc%label(mc%used(i)), i-0.5d0, -0.5d0)
+          call fp%text(mc%label(mc%used(i)), -1.d0, i-0.5d0)
+       endif
+    enddo
+    call fp%density(dble(mc%corrmat(mc%want, mc%want)), 0.d0, dble(mc%nwant), 0.d0, dble(mc%nwant), "correlation", 0.d0, 1.d0)
+    call fp%close()
     
+    
+
+
     call fp%open(trim(mc%output)//".corr", "w")
     call coop_write_matrix(fp%unit, mc%corrmat, mc%np_used, mc%np_used)
     call fp%close()
+    
 
     call fp%open(trim(mc%output)//".mcorr", "w")
     do i = 1, mc%np_used

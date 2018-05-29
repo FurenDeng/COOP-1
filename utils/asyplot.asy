@@ -614,6 +614,7 @@ picture make_picture(file inputfile){
  real infty = 0.99e30;
  int  topaxis = 0;
  int  rightaxis = 0;
+ int num_xticks, num_yticks;
  real topaxis_xmin, topaxis_xmax, rightaxis_ymin, rightaxis_ymax;
  bool xlog, ylog, zlog, topaxis_xlog, rightaxis_ylog, doclip;
  bool xmin_adjust, xmax_adjust, ymin_adjust, ymax_adjust, zmin_adjust, zmax_adjust;
@@ -1454,11 +1455,13 @@ picture make_picture(file inputfile){
  t = inputfile.dimension(3); //xmin, xmax, num_xticks; num_xticks is ignored in Asymptote; in python the automatic ticks are bad so need this parameter
  cxmin = t[0];
  cxmax = t[1];
+ num_xticks = (int) t[2];
  xmin_adjust = (cxmin >= infty);
  xmax_adjust = (cxmax <= -infty);
  t = inputfile.dimension(3); // ymin, ymax, num_yticks; num_yticks is ignored in Asymptote;
  cymin = t[0];
  cymax = t[1];
+ num_yticks = (int) t[2];
  ymin_adjust = (cymin >= infty);
  ymax_adjust = (cymax <= -infty);
  //here you might want to upgrade?
@@ -1484,7 +1487,7 @@ picture make_picture(file inputfile){
    while(plot_block(inputfile));
  }
  // plot the axes
- plot_axes();
+ if(num_xticks>=0 && num_yticks>=0) plot_axes();
  return mypic;
 };
 
