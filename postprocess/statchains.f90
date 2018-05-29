@@ -737,7 +737,7 @@ contains
 !!$          call coop_asy_legend(fig_dcls, 45., 420., 1, box = .false.)
 !!$          call fig_dcls%close()
 !!$       endif
-       call fig_pot%label( COOP_STR_OF(mypp_nknots+1)//" knots", 0.1, 0.2)
+       call fig_pot%label( COOP_STR_OF(mypp_nknots+1)//" knots", 0.06, 0.2)
        if(trim(mc%datasets) .eq. "")then
           if(mc%index_of("r") .ne. 0)then
              call coop_asy_label(fig_spec,  "BK15 + lowl + simall + plik TTTEEE + lensing", 0.013, 6., "black")
@@ -748,9 +748,9 @@ contains
              endif
           endif
        else
-          call coop_asy_label(fig_spec, trim(mc%datasets), 0.012, 8., "black")
-          call fig_pot%label(trim(mc%datasets), 0.1, 0.1)
-          call fig_eps%label(trim(mc%datasets), 0.2, 0.92)         
+          call coop_asy_label(fig_spec, trim(mc%datasets), 0.013, 6., "black")
+          call fig_pot%label(trim(mc%datasets), 0.06, 0.1)
+          call fig_eps%label(trim(mc%datasets), 0.06, 0.92)         
        endif
        call coop_asy_legend_advance(fig_spec, real(exp(lnkmin + 1.)), 170., "invisible", 0., 0., 0.8, 0.9, 0.9, 2)
 !       call coop_asy_legend(fig_pot, -0.05, 0.072, 1, box=.false.)
