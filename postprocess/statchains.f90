@@ -1022,8 +1022,8 @@ contains
     call fp%init(xlabel="", ylabel="", width=10., height=8., xmin=0., xmax=real(mc%nwant), ymin=0., ymax=real(mc%nwant), nxticks=-1, nyticks=-1)
     do i=1, mc%np_used
        if(mc%want_1d_output(i))then
-          call fp%text(mc%label(mc%used(i)), i-0.5d0, -0.5d0)
-          call fp%text(mc%label(mc%used(i)), -1.d0, i-0.5d0)
+          call fp%text(mc%label(mc%used(i)), i-0.5d0, -0.4d0)
+          call fp%text(mc%label(mc%used(i)), -0.2d0, i-0.6d0, alignment="left")
        endif
     enddo
     call fp%density(dble(mc%corrmat(mc%want, mc%want)), 0.d0, dble(mc%nwant), 0.d0, dble(mc%nwant), "correlation", 0.d0, 1.d0)
