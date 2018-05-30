@@ -558,7 +558,7 @@ contains
     COOP_INT,parameter::nk = 41
     COOP_INT,parameter::distlss = 13893.
     COOP_INT, parameter::num_1sigma_trajs = 50
-    COOP_INT, parameter::num_samples_to_get_mean = 8000
+    COOP_INT::num_samples_to_get_mean
     COOP_INT,parameter::lmin = coop_pp_lmin, lmax = coop_pp_lmax, num_cls_samples = 50
     COOP_REAL,parameter::standard_ns = 0.967d0
     COOP_REAL,parameter::low_ell_cut = 50
@@ -573,16 +573,21 @@ contains
     COOP_SINGLE total_mult, cltraj_weight, x(mc%nb), ytop
     logical first_1sigma, inflation_consistency, do_dcl
     COOP_REAL  norm, lnkmin, lnkmax, cltt, errup, errdown, mean_lnAs, hubble, dns_trial
-    COOP_REAL  lnk(nk), kMpc(nk), ps(nk), pt(nk), lnpsmean(nk), lnptmean(nk), lnpscov(nk, nk), lnps(nk), lnpt(nk),  mineig, clnps(mypp_n), clnpt(mypp_n), lnps_bounds(-2:2,nk), lnpt_bounds(0:2,nk), eps_bounds(0:2,nk),  standard_lnps(nk), mult_samples(num_samples_to_get_mean)
+    COOP_REAL  lnk(nk), kMpc(nk), ps(nk), pt(nk), lnpsmean(nk), lnptmean(nk), lnpscov(nk, nk), lnps(nk), lnpt(nk),  mineig, clnps(mypp_n), clnpt(mypp_n), lnps_bounds(-2:2,nk), lnpt_bounds(0:2,nk), eps_bounds(0:2,nk),  standard_lnps(nk)
     COOP_REAL, dimension(:,:),allocatable::pcamat, eps_samples, phi_samples, lnV_samples, lnps_samples, lnpt_samples    
     COOP_REAL, dimension(:),allocatable::eig, ipca
     COOP_REAL:: ps_trajs(nk, num_1sigma_trajs), pt_trajs(nk, num_1sigma_trajs), eps_trajs(nk, num_1sigma_trajs), phi_trajs(nk, num_1sigma_trajs), lnV_trajs(nk, num_1sigma_trajs)
 !!knots statistics    
-    COOP_REAL,dimension(:),allocatable::lnk_knots, lnps_knots, k_knots, lnps_mean_knots, lnps_standard_knots
+    COOP_REAL,dimension(:),allocatable::lnk_knots, lnps_knots, k_knots, lnps_mean_knots, lnps_standard_knots, mult_samples
     COOP_REAL,dimension(:,:),allocatable::cov_knots, cov_lowk, cov_highk, cov_all
+    logical,dimension(:),allocatable::used
     COOP_STRING:: inline
     COOP_REAL::best_ns, best_ns_chisq, this_ns_chisq, best_ns_lowk_chisq, best_ns_highk_chisq
-    allocate(eps_samples(num_samples_to_get_mean, nk), phi_samples(num_samples_to_get_mean, nk), lnV_samples(num_samples_to_get_mean, nk), lnps_samples(num_samples_to_get_mean, nk), lnpt_samples(num_samples_to_get_mean, nk))
+
+    num_samples_to_get_mean = min(10000, mc%n/3)
+    allocate(eps_samples(num_samples_to_get_mean, nk), phi_samples(num_samples_to_get_mean, nk), lnV_samples(num_samples_to_get_mean, nk), lnps_samples(num_samples_to_get_mean, nk), lnpt_samples(num_samples_to_get_mean, nk), mult_samples(num_samples_to_get_mean))
+    allocate(used(mc%n))
+    used = .false.
     mc%output = trim(adjustl(output))//trim(coop_file_name_of(mc%prefix))
     !! =================================================================!!
 
@@ -637,9 +642,14 @@ contains
           isam = isam + 1
           if(isam .eq. 1)then
              j = mc%ibest
+             used(j) = .true.
           else
-             j = coop_random_index(mc%n)
+             do while(used(j))
+                j = coop_random_index(mc%n)
+             enddo
+             used(j) = .true.
           endif
+          
           if(mc%index_r .eq. 0)then
              call mypp_setup_pp(As = exp(dble(mc%Params(j, mc%index_logA)))*1.d-10, ns = mc%default_ns, nknots = mypp_nknots, dlnps = dble(mc%Params(j, mc%index_pp: mc%index_pp+mypp_nknots-1)), r = mc%default_r )
           else
@@ -709,7 +719,7 @@ contains
        do ik = 1, nk
           call coop_get_bounds(lnps_samples(:, ik), (/ 0.023d0, 0.1585d0, 0.5d0, 0.8415d0, 0.977d0 /), lnps_bounds(-2:2, ik), mult_samples)
           call coop_get_bounds(lnpt_samples(:, ik), (/ 0.683d0, 0.954d0 /), lnpt_bounds(1:2, ik), mult_samples)
-          call coop_get_bounds(eps_samples(:, ik), (/ 0.683d0, 0.9545d0 /), eps_bounds(1:2, ik), mult_samples)
+          call coop_get_bounds(eps_samples(:, ik), (/ 0.683d0, 0.955d0 /), eps_bounds(1:2, ik), mult_samples)
        enddo
        lnpt_bounds(0,:) = spec_ymin
        eps_bounds(0, :) = 0.
@@ -1038,13 +1048,13 @@ contains
     do i=1, mc%np_used
        if(mc%want_1d_output(i))then
           call fp%text(mc%label(mc%used(i)), i-0.5d0, -0.4d0)
-          call fp%text(mc%label(mc%used(i)), -0.2d0, i-0.6d0, alignment="left")
+          call fp%text(mc%label(mc%used(i)), -0.1d0, i-0.6d0, alignment="left")
        endif
     enddo
     call fp%density(dble(mc%corrmat(mc%want, mc%want)), 0.d0, dble(mc%nwant), 0.d0, dble(mc%nwant), "correlation", 0.d0, 1.d0)
     do i=1, mc%nwant
        do j=1, mc%nwant
-          call fp%text("{\bf "//trim(coop_num2str(mc%corrmat(mc%want(i), mc%want(j)), "(F10.2)"))//"}", i-0.5d0, -0.4d0)
+          call fp%text("{\bf "//trim(coop_num2str(mc%corrmat(mc%want(i), mc%want(j)), "(F10.2)"))//"}", i-0.5d0, j-0.6d0)
        enddo
     enddo
     call fp%close()
