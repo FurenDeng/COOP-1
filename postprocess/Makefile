@@ -24,4 +24,4 @@ MergeChains: 	$(OBJ) merge_chains.o
 
 
 clean:
-	rm -f *.o *.*~ *.mod \#* *.a Makefile~ Test GD
+	rm -f *.o *.*~ *.mod \#* *.a Makefile~ Test GD MergeChains

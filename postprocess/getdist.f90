@@ -45,8 +45,12 @@ program getdist
   if(trim(outdir) .eq. "") stop "You need to specify the key 'output' in ini file"
   discard_percent = ini_read_int("discard_percent", 30)
   mc%fit_skewness_threshold = ini_read_real("fit_skewness_threshold", 0.1)
-  mc%fit_kurtosis_threshold = ini_read_real("fit_kurtosis_threshold", 0.02)  
-  write(*,*) "discarding "//trim(coop_num2str(discard_percent))//"% samples at the beginning of chains"
+  mc%fit_kurtosis_threshold = ini_read_real("fit_kurtosis_threshold", 0.02)
+  if(discard_percent .lt. 100)then
+     write(*,*) "discarding "//trim(coop_num2str(discard_percent))//"% samples at the beginning of chains"
+  else
+     write(*,*) "discarding "//trim(coop_num2str(discard_percent))//"lines at the beginning of chains"     
+  endif
 
   if(mcmc_stat_num_cls .ge.6)then
      stop "too many contour levels, please adjust mcmc_stat_num_cls in statchains.f90"

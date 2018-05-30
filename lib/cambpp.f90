@@ -276,8 +276,8 @@ contains
   subroutine mypp_get_potential()
     integer::iloc(1:1)
     integer i
-    real*8, parameter::max_delta = 0.4
-    real*8, parameter::max_lneps = log(0.4)
+    real*8, parameter::max_delta = 0.1
+    real*8, parameter::max_lneps = log(0.1)
     real*8 dlnk, fourdlnk, dphiby2(mypp_n), eps(mypp_n), delta(mypp_n)
     iloc = minloc(abs(mypp_lnk - mypp_lnkpiv))
     mypp_ipivot = iloc(1)
@@ -290,8 +290,16 @@ contains
           delta(i) = sign(max_delta, delta(i))
        endif
     enddo
-    delta(1) = delta(2)
-    delta(mypp_n) = delta(mypp_n  - 1)
+    delta(1) = (mypp_lnps(1)-mypp_lnps(2))/dlnk/2.d0 !delta(2)
+    delta(mypp_n) = (mypp_lnps(mypp_n-1)-mypp_lnps(mypp_n))/dlnk/2.d0 !delta(mypp_n  - 1)
+    i=1
+    if(abs(delta(i)) .gt. max_delta)then
+       delta(i) = sign(max_delta, delta(i))
+    endif
+    i=mypp_n
+    if(abs(delta(i)) .gt. max_delta)then
+       delta(i) = sign(max_delta, delta(i))
+    endif    
     mypp_lneps = min(mypp_lnpt - mypp_lnps - log(16.d0), max_lneps) 
     eps = exp(mypp_lneps)
     mypp_lneps = min(max_lneps,  mypp_lneps - log( (1.d0 - (2.d0*(log(2.d0)+mypp_EulerC-1.d0))*eps ) /(1.d0-2.d0*eps+(2.d0*(2.d0-mypp_EulerC-log(2.d0)))*delta))) !!slow-roll correction

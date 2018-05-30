@@ -26,27 +26,45 @@ program getdist
      read(tmpstr, *) perc
   endif
 
-  call system("cp "//trim(root1)//".inputparams "//trim(root_out)//".inputparams")
-  call system("cp "//trim(root1)//".ranges "//trim(root_out)//".ranges")
-  call system("cp "//trim(root1)//".paramnames "//trim(root_out)//".paramnames")
-  call system("cp "//trim(root1)//".likelihoods "//trim(root_out)//".likelihoods")
+  if(trim(root_out) .eq. "overwrite")then
+     do i=1, ind
+        row2 = coop_file_numlines(trim(root2)//"_"//COOP_STR_OF(i)//".txt")
+        call fp1%open(trim(root1)//"_"//COOP_STR_OF(i)//".txt", "a")
+        call fp2%open(trim(root2)//"_"//COOP_STR_OF(i)//".txt")
+        do j=1, row2*perc/100
+           read(fp2%unit, "(a)")line
+        enddo
+        do j= row2*perc/100+1, row2
+           read(fp2%unit, "(a)")line
+           write(fp1%unit, "(a)") trim(line)
+        enddo
+        call fp1%close()
+        call fp2%close()
+     enddo
+     
+  else
+     call system("cp "//trim(root1)//".inputparams "//trim(root_out)//".inputparams")
+     call system("cp "//trim(root1)//".ranges "//trim(root_out)//".ranges")
+     call system("cp "//trim(root1)//".paramnames "//trim(root_out)//".paramnames")
+     call system("cp "//trim(root1)//".likelihoods "//trim(root_out)//".likelihoods")
 
-  
-  do i=1, ind
-     row2 = coop_file_numlines(trim(root2)//"_"//COOP_STR_OF(i)//".txt")
-     call system("cp "//trim(root1)//"_"//COOP_STR_OF(i)//".txt "//trim(root_out)//"_"//COOP_STR_OF(i)//".txt")
-     call fp1%open(trim(root_out)//"_"//COOP_STR_OF(i)//".txt", "a")
-     call fp2%open(trim(root2)//"_"//COOP_STR_OF(i)//".txt")
-     do j=1, row2*perc/100
-        read(fp2%unit, "(a)")line
+     do i=1, ind
+        row2 = coop_file_numlines(trim(root2)//"_"//COOP_STR_OF(i)//".txt")
+        if(row2 .lt. 50)cycle  !!ignore small files
+        call system("cp "//trim(root1)//"_"//COOP_STR_OF(i)//".txt "//trim(root_out)//"_"//COOP_STR_OF(i)//".txt")
+        call fp1%open(trim(root_out)//"_"//COOP_STR_OF(i)//".txt", "a")
+        call fp2%open(trim(root2)//"_"//COOP_STR_OF(i)//".txt")
+        do j=1, row2*perc/100
+           read(fp2%unit, "(a)")line
+        enddo
+        do j= row2*perc/100+1, row2
+           read(fp2%unit, "(a)")line
+           write(fp1%unit, "(a)") trim(line)
+        enddo
+        call fp1%close()
+        call fp2%close()
      enddo
-     do j= row2*perc/100+1, row2
-        read(fp2%unit, "(a)")line
-        write(fp1%unit, "(a)") trim(line)
-     enddo
-     call fp1%close()
-     call fp2%close()
-  enddo
+  endif
 end program getdist
 
 
