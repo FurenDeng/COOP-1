@@ -573,7 +573,7 @@ contains
     COOP_SINGLE total_mult, cltraj_weight, x(mc%nb), ytop
     logical first_1sigma, inflation_consistency, do_dcl
     COOP_REAL  norm, lnkmin, lnkmax, cltt, errup, errdown, mean_lnAs, hubble, dns_trial
-    COOP_REAL  lnk(nk), kMpc(nk), ps(nk), pt(nk), lnpsmean(nk), lnptmean(nk), lnpscov(nk, nk), lnps(nk), lnpt(nk),  mineig, clnps(mypp_n), clnpt(mypp_n), lnps_bounds(-2:2,nk), lnpt_bounds(0:2,nk), eps_bounds(0:2,nk),  standard_lnps(nk)
+    COOP_REAL  lnk(nk),  standard_lnps(nk), kMpc(nk), ps(nk), pt(nk), lnpsmean(nk), lnptmean(nk), lnpscov(nk, nk), lnps(nk), lnpt(nk),  mineig, clnps(mypp_n), clnpt(mypp_n), lnps_bounds(-2:2,nk), lnpt_bounds(0:2,nk), eps_bounds(0:2,nk), phi_rs(nk)
     COOP_REAL, dimension(:,:),allocatable::pcamat, eps_samples, phi_samples, lnV_samples, lnps_samples, lnpt_samples    
     COOP_REAL, dimension(:),allocatable::eig, ipca
     COOP_REAL:: ps_trajs(nk, num_1sigma_trajs), pt_trajs(nk, num_1sigma_trajs), eps_trajs(nk, num_1sigma_trajs), phi_trajs(nk, num_1sigma_trajs), lnV_trajs(nk, num_1sigma_trajs)
@@ -690,10 +690,10 @@ contains
              eps_trajs(:, num_trajs) = eps_samples(isam, :)
              phi_trajs(:, num_trajs) = phi_samples(isam, :)
              lnv_trajs(:, num_trajs) = lnV_samples(isam, :)
-          endif
+          endif          
        enddo
        call fp%close()
-
+       
        !!now plot the mean
        total_mult = sum(mult_samples)
        do ik = 1, nk
