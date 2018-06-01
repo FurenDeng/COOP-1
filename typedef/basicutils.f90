@@ -929,6 +929,8 @@ contains
   end subroutine coop_chebfit_uniform
 
 
+
+  
   !!suppose f(x) is expanded with chebyshev polynomial c (with boundaries a, b mapped to -1, 1)
   !!this subroutine expand f'(x) with chebyshev polynomials (same boundaries)
   subroutine coop_chebfit_derv(n, a, b, c, cder)
@@ -950,6 +952,24 @@ contains
     t = 2.*(x-a)/(b-a)-1.
     call  coop_get_cheb_value(n, c, t, y)
   end subroutine coop_chebeval
+
+
+
+  !!fit function f: x-> y, and do mapping: y = f(xrs) (overwrite y)
+  subroutine coop_cheb_resample(n, x, y, xrs, cheb_order)
+    COOP_INT::n, i
+    COOP_REAL::x(n), y(n), xrs(n), dx
+    COOP_INT::cheb_order
+    COOP_REAL::a, b, c(cheb_order)
+    dx = (xrs(n)-xrs(1))/cheb_order/2.d0
+    a = xrs(1) - dx
+    b = xrs(n) + dx
+    call coop_chebfit(n, x, y, cheb_order, a, b, c)
+    do i=1, n
+       call coop_chebeval(cheb_order, a, b, c, xrs(i), y(i))
+    enddo
+  end subroutine coop_cheb_resample
+  
 
   function coop_isnan_d(x)  result(isnan)
     COOP_REAL x

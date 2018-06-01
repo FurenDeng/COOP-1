@@ -573,7 +573,7 @@ contains
     COOP_SINGLE total_mult, cltraj_weight, x(mc%nb), ytop
     logical first_1sigma, inflation_consistency, do_dcl
     COOP_REAL  norm, lnkmin, lnkmax, cltt, errup, errdown, mean_lnAs, hubble, dns_trial
-    COOP_REAL  lnk(nk),  standard_lnps(nk), kMpc(nk), ps(nk), pt(nk), lnpsmean(nk), lnptmean(nk), lnpscov(nk, nk), lnps(nk), lnpt(nk),  mineig, clnps(mypp_n), clnpt(mypp_n), lnps_bounds(-2:2,nk), lnpt_bounds(0:2,nk), eps_bounds(0:2,nk), phi_rs(nk)
+    COOP_REAL  lnk(nk),  standard_lnps(nk), kMpc(nk), ps(nk), pt(nk), lnpsmean(nk), lnptmean(nk), lnpscov(nk, nk), lnps(nk), lnpt(nk),  mineig, clnps(mypp_n), clnpt(mypp_n), lnps_bounds(-2:2,nk), lnpt_bounds(0:2,nk), eps_bounds(0:2,nk), lnV_bounds(-2:2, nk), phi_rs(nk)
     COOP_REAL, dimension(:,:),allocatable::pcamat, eps_samples, phi_samples, lnV_samples, lnps_samples, lnpt_samples    
     COOP_REAL, dimension(:),allocatable::eig, ipca
     COOP_REAL:: ps_trajs(nk, num_1sigma_trajs), pt_trajs(nk, num_1sigma_trajs), eps_trajs(nk, num_1sigma_trajs), phi_trajs(nk, num_1sigma_trajs), lnV_trajs(nk, num_1sigma_trajs)
@@ -693,6 +693,12 @@ contains
           endif          
        enddo
        call fp%close()
+
+       call coop_set_uniform(nk, phi_rs, minval(phi_samples(:, 1)), maxval(phi_samples(:, nk)))
+       write(*,*) "Extrapolating V(phi) for phi from "//COOP_STR_OF(phi_rs(1))//" to "//COOP_STR_OF(phi_rs(nk))
+       do isam = 1, num_samples_to_get_mean
+          call coop_cheb_resample(nk, phi_samples(isam, :), lnV_samples(isam, :), phi_rs, 5)
+       enddo
        
        !!now plot the mean
        total_mult = sum(mult_samples)
@@ -720,6 +726,7 @@ contains
           call coop_get_bounds(lnps_samples(:, ik), (/ 0.023d0, 0.1585d0, 0.5d0, 0.8415d0, 0.977d0 /), lnps_bounds(-2:2, ik), mult_samples)
           call coop_get_bounds(lnpt_samples(:, ik), (/ 0.683d0, 0.954d0 /), lnpt_bounds(1:2, ik), mult_samples)
           call coop_get_bounds(eps_samples(:, ik), (/ 0.683d0, 0.955d0 /), eps_bounds(1:2, ik), mult_samples)
+          call coop_get_bounds(lnV_samples(:, ik), (/ 0.023d0, 0.1585d0, 0.5d0, 0.8415d0, 0.977d0 /), lnV_bounds(-2:2, ik), mult_samples)
        enddo
        lnpt_bounds(0,:) = spec_ymin
        eps_bounds(0, :) = 0.
@@ -728,6 +735,10 @@ contains
 
        call fig_spec%band(kmpc, lnpt_bounds(0,:), 1.d10*exp(lnpt_bounds(2,:)), colorfill = trim(coop_asy_gray_color(0.67)), linecolor="invisible")
        call fig_spec%band(kmpc, lnpt_bounds(0,:), 1.d10*exp(lnpt_bounds(1,:)), colorfill = trim(coop_asy_gray_color(0.42)), linecolor="invisible")
+
+       call fig_pot%band(phi_rs, lnV_bounds(-2,:), lnV_bounds(2,:), colorfill = trim(coop_asy_gray_color(0.67)), linecolor="invisible")
+       call fig_pot%band(phi_rs, lnV_bounds(-1,:), lnV_bounds(1,:), colorfill = trim(coop_asy_gray_color(0.42)), linecolor="invisible")
+
        
        call fig_eps%band(kmpc, eps_bounds(0,:),  eps_bounds(2, :), colorfill = trim(coop_asy_gray_color(0.67)), linecolor="invisible")
        call fig_eps%band(kmpc, eps_bounds(0,:), eps_bounds(1, :),  colorfill = trim(coop_asy_gray_color(0.42)), linecolor="invisible")       
@@ -736,7 +747,7 @@ contains
        call fig_spec%curve(kmpc, pt_trajs(:, 1), color="HEX:8CD3F5", linetype="dotted", linewidth=0.8, legend="$\mathcal{P}_{\mathrm{t}}$ samples")
        
        call fig_eps%curve(kmpc, eps_trajs(:,1), color="HEX:006FED", linetype="dotted", linewidth=0.8,legend="inflation $\epsilon$ samples")
-       call fig_pot%curve(phi_trajs(:,1), lnV_trajs(:, 1), color="HEX:006FED", linetype="dotted", linewidth=0.8, legend="inflation potential samples")
+       call fig_pot%curve(phi_trajs(:,1), lnV_trajs(:, 1), color="HEX:006FED", linetype="dotted", linewidth=1., legend="inflation potential samples")
        
        do j=2, num_trajs
           call fig_spec%curve(kmpc, ps_trajs(:,j), color="HEX:006FED", linetype="dashed", linewidth=0.5)

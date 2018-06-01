@@ -815,7 +815,7 @@ contains
   function coop_ratval(x,cof,mm,kk) result(ratval)
     COOP_INT kk,mm, j
     COOP_REAL ratval,x,cof(mm+kk+1)
-    !!From NR: Given mm, kk, and cof(1:mm+kk+1), evaluate and return the rational function (cof(1)+ cof(2)x + · · · + cof(mm+1)x^mm)/(1 + cof(mm+2)x + · · · + cof(mm+kk+1)xkk). INTEGER j
+    !!From NR: Given mm, kk, and cof(1:mm+kk+1), evaluate and return the rational function (cof(1)+ cof(2)x + · · · + cof(mm+1)x^mm)/(1 + cof(mm+2)x + · · · + cof(mm+kk+1)x^kk). INTEGER j
     COOP_REAL:: sumd,sumn
     sumn=cof(mm+1)
     do j=mm,1,-1
@@ -847,7 +847,7 @@ contains
     qlu=q
     call coop_matrix_ludcmp(qlu,indx,d, n)
     call coop_matrix_lubksb(qlu,indx,x, n)
-    rr=BIG
+    rr=big
     do
        rrold=rr
        z=x
@@ -1095,6 +1095,7 @@ contains
     y =  coop_ratval(xs, this%c, this%n_up, this%n_down)
     if(this%ylog)y=exp(y)
   end function coop_smooth_fit_eval
+
 
   
 

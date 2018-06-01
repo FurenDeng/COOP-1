@@ -11,15 +11,26 @@ contains
     COOP_REAL::f2,x
     f2 = f1(x)*x
   end function f2
+
+  subroutine doublearr(x)
+    COOP_REAL,dimension(:)::x
+    x = x*2
+  end subroutine doublearr
 end module tmp
+
+
 
 program Test
 #include "constants.h"    
   use tmp
   use coop_wrapper_utils
   implicit none
-
-  print*, coop_integrate(f2,0.d0,300.d0)/coop_integrate(f1, 0.d0, 300.d0)
+  COOP_REAL:: x(2,3)
+  x(1,:) = 1
+  x(2,:) = 2
+  call doublearr(x(2,:))
+  write(*,*) x(1,:)
+  write(*,*) x(2,:)
 end program Test
 
 
