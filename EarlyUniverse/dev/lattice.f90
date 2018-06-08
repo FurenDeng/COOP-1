@@ -2,7 +2,7 @@ module coop_lattice_mod
   use coop_wrapper_utils
   implicit none
 #include "constants.h"
-  !!This is HLattice v3.0: a fine lattice for field and coarse-grained lattice for gravity is used.
+  !!This is HLattice v3.0: a fine-grained lattice for field and coarse-grained lattice for gravity is used.
 #include "lattice.h"  
 
   private

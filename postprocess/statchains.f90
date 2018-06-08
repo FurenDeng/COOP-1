@@ -569,7 +569,7 @@ contains
     type(coop_file)::fcl
     type(coop_asy) fp, fig_spec, fig_pot, fig_eps
     type(coop_asy_path) path    
-    COOP_INT i , ip, j,  j2, k, ik, ik1,  ik2, ndof, l, junk, num_params,  pp_location, icontour, numpp, num_trajs, ind_lowk, isam, index_H, ind_highk
+    COOP_INT i , ip, j,  j2, k, ik, ik1,  ik2, ndof, l, junk, num_params,  pp_location, icontour, numpp, num_trajs, ind_lowk, isam, index_H, num_convex, ind_pivot
     COOP_SINGLE total_mult, cltraj_weight, x(mc%nb), ytop
     logical first_1sigma, inflation_consistency, do_dcl
     COOP_REAL  norm, lnkmin, lnkmax, cltt, errup, errdown, mean_lnAs, hubble, dns_trial
@@ -696,8 +696,11 @@ contains
 
        call coop_set_uniform(nk, phi_rs, minval(phi_samples(:, 1)), maxval(phi_samples(:, nk)))
        write(*,*) "Extrapolating V(phi) for phi from "//COOP_STR_OF(phi_rs(1))//" to "//COOP_STR_OF(phi_rs(nk))
+       ind_pivot = coop_minloc(abs(phi_rs))
+       num_convex = 0
        do isam = 1, num_samples_to_get_mean
           call coop_cheb_resample(nk, phi_samples(isam, :), lnV_samples(isam, :), phi_rs, 5)
+          if(sum(lnV_samples(isam, ind_pivot-2:ind_pivot+2))/5.d0 .gt.  lnV_samples(isam, ind_pivot)) num_convex = num_convex + 1
        enddo
        
        !!now plot the mean
@@ -747,7 +750,7 @@ contains
        call fig_spec%curve(kmpc, pt_trajs(:, 1), color="HEX:8CD3F5", linetype="dotted", linewidth=0.8, legend="$\mathcal{P}_{\mathrm{t}}$ samples")
        
        call fig_eps%curve(kmpc, eps_trajs(:,1), color="HEX:006FED", linetype="dotted", linewidth=0.8,legend="inflation $\epsilon$ samples")
-       call fig_pot%curve(phi_trajs(:,1), lnV_trajs(:, 1), color="HEX:006FED", linetype="dotted", linewidth=1., legend="inflation potential samples")
+       call fig_pot%curve(phi_trajs(:,1), lnV_trajs(:, 1), color="HEX:006FED", linetype="dotted", linewidth=1.2, legend="inflation potential samples")
        
        do j=2, num_trajs
           call fig_spec%curve(kmpc, ps_trajs(:,j), color="HEX:006FED", linetype="dashed", linewidth=0.5)
@@ -773,7 +776,8 @@ contains
           ps(1:mypp_nknots+1) = -eps_ymax/15.
           call coop_asy_dots(fig_eps, k_knots, ps(1:mypp_nknots+1), "black", "$\Delta$")
        endif
-       call fig_pot%label( COOP_STR_OF(mypp_nknots+1)//" knots", 0.06, 0.2)
+       call fig_pot%label( COOP_STR_OF(mypp_nknots+1)//" knots; p(convex) = "//trim(coop_num2str(real(num_convex)/num_samples_to_get_mean,"(F10.2)")),  0.06, 0.2)
+       
        if(trim(mc%datasets) .eq. "")then
           if(mc%index_of("r") .ne. 0)then
              call coop_asy_label(fig_spec,  "BK15 + lowl + simall + plik TTTEEE + lensing", 0.013, 6., "black")

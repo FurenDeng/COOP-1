@@ -1,4 +1,6 @@
-!!!lattice simulation of scalar dynamics (ignore metric perturbations)
+!! HLattice: lattice simulation of scalar dynamics (ignore metric perturbations)
+!! The model is defined in include/lattice_field_model.h (For your own model, replace the file and recompile HLattice)
+
 module coop_lattice_fields_mod
   use coop_wrapper_utils
   implicit none
@@ -59,26 +61,10 @@ module coop_lattice_fields_mod
 contains
 
 
-  !!============ editable section: define your model here ===========
+  !!============ include field model
 
-
-#define PHI phi(1)
-#define CHI phi(2)  
-
-  function coop_lattice_fields_V(phi) result(V)
-    COOP_REAL::phi(:), V
-    V =  lambda * ( (1.d0/4.d0) * PHI **2 + (g2byl/2.d0) * CHI **2 ) * PHI**2
-  end function coop_lattice_fields_V
-
-  function coop_lattice_fields_dVdphi(phi) result(dVdphi)
-    COOP_REAL::phi(:), dVdphi(size(phi))
-    dVdphi(1) = lambda*(PHI**2 + g2byl * CHI**2) * PHI
-    dVdphi(2) = (lambda*g2byl) * CHI * PHI**2
-  end function coop_lattice_fields_dVdphi
+#include "lattice_field_model.h"
   
-#undef PHI
-#undef CHI  
-  !!===========================end of editable section ==============
 
   subroutine coop_lattice_fields_free(this)
     class(coop_lattice_fields)::this
