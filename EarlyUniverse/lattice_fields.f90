@@ -33,7 +33,8 @@ module coop_lattice_fields_mod
      COOP_REAL::pi_y
      COOP_REAL::dx = 1.d0
      COOP_REAL::dk, L, kmax
-     COOP_REAL::mu = 1.d0   !!d (cosmological time)  = a^mu d (program time)
+     COOP_REAL::mu = 1.d0
+     !!d (cosmological time)  = a^mu d (program time);
      COOP_REAL::raw_KE, raw_GE, raw_PE !!not normalize
      COOP_REAL::KE, GE, PE,a, H !!normalize
      logical::expansion = .true.
@@ -307,28 +308,53 @@ contains
     this%pi_y = this%pi_y_constrained()
   end subroutine coop_lattice_fields_set_pi_y
 
-  subroutine coop_lattice_fields_init(this, mu, n, LH,  phi, pi, phi_sigma2)
+
+  !!set initial perturbatioins
+  !!n: the box resolultion (n^3 grids)
+  !!LH: the comoving boxsize in unit of (aH)^{-1}
+  !!phi: initial background fields
+  !!pi: initial d phi/ dt
+  !!phi_sigma2: rms fluctuations at k = aH,
+  !!power_index (default 0): the tilt, k^3 P(k)/(2 \pi^2) = phi_sigma2 * k^{power_index} (similar to n_s-1 in cosmology)
+  !!use_conformal_time (default false): if true, use conformal time;  if false, use physical time; 
+  subroutine coop_lattice_fields_init(this, n, LH,  phi, pi, phi_sigma2, power_index, use_conformal_time)
     class(coop_lattice_fields)::this
     COOP_REAL::LH, phi(:), pi(:), phi_sigma2(:)
-    COOP_REAL,optional::mu
+    COOP_REAL,optional::power_index(:)
     COOP_INT::n
     COOP_COMPLEX fk(0:n/2,0:n-1, 0:n-1)
-    COOP_REAL::ftmp(0:n-1, 0:n-1, 0:n-1), norm, phi_sigma, k2
+    COOP_REAL::ftmp(0:n-1, 0:n-1, 0:n-1), norm, phi_sigma, k2, k2_index(size(phi))
     COOP_INT::i, j, k, fld
+    logical,optional::use_conformal_time
     call this%alloc(nflds = size(phi), n = n)
-    if(present(mu))this%mu = mu
+    if(present(use_conformal_time))then
+       if(use_conformal_time)then
+          this%mu = 1.d0
+       else
+          this%mu = 0.d0
+       endif
+    else
+       this%mu = 0.d0
+    endif
+    if(size(pi) .ne. this%nflds .or. size(phi_sigma2).ne. this%nflds)call coop_return_error("lattice_fields_init", "array sizes do not match", "stop")
     this%L = LH/sqrt((coop_lattice_fields_V(phi) + sum(pi**2)/2.d0)/3.d0/coop_lattice_Mpsq)
     this%dx = this%L / this%n
     this%dk = coop_2pi / this%L
     this%kmax = this%n/2 * this%dk
-    norm = 1.d0/sqrt(4.d0*coop_pi)
+    norm = 1.d0/sqrt(4.d0*coop_pi)    
+    if(present(power_index))then
+       if(size(power_index) .ne. this%nflds) call coop_return_error("lattice_fields_init", "array sizes do not match", "stop")
+       k2_index = (3.d0-power_index)/4.d0
+    else
+       k2_index = 3.d0/4.d0
+    endif
     do fld = 1, this%nflds
        this%pi(fld, :,:,:) = pi(fld)
-       phi_sigma = sqrt(phi_sigma2(fld))*norm
+       phi_sigma = sqrt(phi_sigma2(fld))*norm*(LH/coop_2pi)**(2.d0*k2_index(fld)-1.5)
        do  k = 0, this%n-1; do j = 0, this%n-1; do i = 0, this%n/2
           k2 = (min(dble(j), dble(this%n-j))**2  + min(dble(k), dble(this%n-k))**2 + dble(i)**2)
           if(k2 .gt. 0.d0 .and. k2 .lt. (this%n*0.49d0)**2)then
-             fk(i, j, k) = phi_sigma/k2**0.75d0*norm*coop_random_complex_Gaussian()
+             fk(i, j, k) = phi_sigma/k2**k2_index(fld) *  coop_random_complex_Gaussian()
           else
              fk(i, j, k) = 0.d0
           endif
