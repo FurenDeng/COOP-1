@@ -9,7 +9,7 @@ module coop_lattice_fields_mod
 
 
   private
-  public:: coop_lattice_fields, coop_lattice_Mp, coop_lattice_Mpsq, coop_lattice_fields_V, coop_lattice_fields_dVdphi
+  public:: coop_lattice_fields, coop_lattice_Mp, coop_lattice_Mpsq, coop_lattice_fields_V, coop_lattice_fields_dVdphi, coop_lattice_background_eqs
 
 
   COOP_REAL, parameter::coop_lattice_Mp = 1024.d0
@@ -368,6 +368,18 @@ contains
   end subroutine coop_lattice_fields_init
 
 
+  ! n = 2 * nflds + 1
+  !y: phi, dphi/dt, H
+  !yp: dy /d ln a
+  subroutine coop_lattice_background_eqs(n, lna, y, yp)
+    COOP_INT::n
+    COOP_REAL::lna, y(n), yp(n)
+    COOP_INT::m
+    m = (n-1)/2
+    yp(1:m) = y(m+1:n-1)/y(n)
+    yp(m+1:n-1) = -3.d0*y(m+1:n-1) - coop_lattice_fields_dVdphi(y(1:m))/y(n)
+    yp(n) = (1.d0/3.d0/coop_lattice_Mpsq) * (coop_lattice_fields_V(y(1:m)) - 2.d0*sum(y(m+1:n-1)**2)/2.d0)/y(n) - y(n)
+  end subroutine coop_lattice_background_eqs
   
 end module coop_lattice_fields_mod
 

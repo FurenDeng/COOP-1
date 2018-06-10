@@ -16,8 +16,8 @@ default: HLattice
 $(LIB):	$(OBJ) 
 	ar -r $@ $?
 
-Test: $(OBJ) test.o
-	$(FC) $(FFLAGS) $(INCLUDE) -o $@ $(OBJ) test.o $(LINK)
+BG: $(OBJ) get_background.o
+	$(FC) $(FFLAGS) $(INCLUDE) -o $@ $(OBJ) get_background.o $(LINK)
 
 HLattice: $(OBJ) runlattice.o
 	$(FC) $(FFLAGS) $(INCLUDE) -o $@ $(OBJ) runlattice.o $(LINK)

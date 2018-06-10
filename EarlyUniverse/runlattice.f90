@@ -21,8 +21,8 @@ program Test
   !!set initial scale factor and Hubble parameter
   call this%set_pi_y()
   !!choose order for ODE solver (2, 4, or 6)
-  this%ode_order = 6.d0
-  write(*,"(4A16)") " a ", "E_K/E_tot", " E_G/E_tot ", "  8\pi G H^2/(3\rho)"
+  this%ode_order = 6
+  write(*,"(4A16)") " a ", "E_K/E_tot", " E_G/E_tot ", " 3H^2/(8\pi G\rho)-1"
   write(*,"(4G16.7)") this%a, this%ke/(this%ke+this%ge+this%pe), this%ge/(this%ke+this%ge+this%pe), this%H**2*3.d0*coop_lattice_Mpsq / (this%ke + this%ge + this%pe) - 1.d0
   !!evolve the fields
   do i = 1, 100
