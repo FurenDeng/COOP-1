@@ -9,17 +9,18 @@ module coop_lattice_fields_mod
 
 
   private
-  public:: coop_lattice_fields, coop_lattice_Mp, coop_lattice_Mpsq, coop_lattice_fields_V, coop_lattice_fields_dVdphi, coop_lattice_background_eqs
+  public:: coop_lattice_fields, coop_lattice_Mp, coop_lattice_Mpsq, coop_lattice_fields_V, coop_lattice_fields_dVdphi, coop_lattice_background_eqs, coop_lattice_background_epsilon,  coop_lattice_background_rhotot
 
 
+  !!M_p^2  = 1/(8\pi G); This just sets the program unit and in principle can be arbitrary.
   COOP_REAL, parameter::coop_lattice_Mp = 1024.d0
   COOP_REAL, parameter::coop_lattice_Mpsq = coop_lattice_Mp ** 2
-!!1/(8\pi G); This just sets the program unit. 
 
-!!************** define your parameters for potential *************
+
+  !!************** define your parameters for potential *************
   COOP_REAL, parameter::lambda = 1.d-13 !!lambda
   COOP_REAL, parameter::g2byl = 2.d0 !!g^2/lambda
-!!*****************************************************************
+  !!*****************************************************************
 
   
   type coop_lattice_fields
@@ -41,6 +42,7 @@ module coop_lattice_fields_mod
    contains
      procedure::pi_y_constrained => coop_lattice_fields_pi_y_constrained
      procedure::set_pi_y => coop_lattice_fields_set_pi_y
+     procedure::set_energies => coop_lattice_fields_set_energies     
      procedure::free => coop_lattice_fields_free
      procedure::init => coop_lattice_fields_init
      procedure::symp2 => coop_lattice_fields_symp2
@@ -62,11 +64,11 @@ module coop_lattice_fields_mod
 contains
 
 
-  !!============ include field model
-
+  !!============ include model file =====================
 #include "lattice_field_model.h"
-  
+  !!------------------------------------
 
+  
   subroutine coop_lattice_fields_free(this)
     class(coop_lattice_fields)::this
     COOP_DEALLOC(this%f)
@@ -290,6 +292,19 @@ contains
   function coop_lattice_fields_pi_y_constrained(this) result(piy)
     class(coop_lattice_fields)::this
     COOP_REAL::piy
+    call this%set_energies()
+    piy = - sqrt(-(this%raw_KE*this%y**K_INDEX + this%raw_GE*this%y**G_INDEX+this%raw_PE*this%y**V_INDEX)*2.d0/GR_COEF)
+  end function coop_lattice_fields_pi_y_constrained
+
+
+  subroutine coop_lattice_fields_set_pi_y(this)
+    class(coop_lattice_fields)::this
+    this%pi_y = this%pi_y_constrained()
+  end subroutine coop_lattice_fields_set_pi_y
+
+
+  subroutine coop_lattice_fields_set_energies(this)
+    class(coop_lattice_fields)::this
     this%raw_KE = this%kinetic_energy(normalize = .false.)
     this%KE = this%raw_KE*this%y**(-12.d0/(3.d0-this%mu))
     this%raw_PE = this%potential_energy()
@@ -299,14 +314,8 @@ contains
     this%GE = this%raw_GE /this%a**2
     this%PE = this%raw_PE
     this%H = sqrt((-this%pi_y**2/2.d0*GR_COEF)/this%y**(2.d0*(3.d0+this%mu)/(3.d0-this%mu))/3.d0/coop_lattice_Mpsq)
-    piy = - sqrt(-(this%raw_KE*this%y**K_INDEX + this%raw_GE*this%y**G_INDEX+this%raw_PE*this%y**V_INDEX)*2.d0/GR_COEF)
-  end function coop_lattice_fields_pi_y_constrained
+  end subroutine coop_lattice_fields_set_energies
 
-
-  subroutine coop_lattice_fields_set_pi_y(this)
-    class(coop_lattice_fields)::this
-    this%pi_y = this%pi_y_constrained()
-  end subroutine coop_lattice_fields_set_pi_y
 
 
   !!set initial perturbatioins
@@ -367,20 +376,41 @@ contains
     call this%set_pi_y()
   end subroutine coop_lattice_fields_init
 
-
-  ! n = 2 * nflds + 1
-  !y: phi, dphi/dt, H
-  !yp: dy /d ln a
-  subroutine coop_lattice_background_eqs(n, lna, y, yp)
+  !!================ utilities for background evolution ====================
+  ! n = 2 * nflds + 2
+  !y: phi, dphi/dt, lna, H
+  !yp: dy /d t
+  subroutine coop_lattice_background_eqs(n, t, y, yp)
     COOP_INT::n
-    COOP_REAL::lna, y(n), yp(n)
+    COOP_REAL::t, y(n), yp(n)
     COOP_INT::m
-    m = (n-1)/2
-    yp(1:m) = y(m+1:n-1)/y(n)
-    yp(m+1:n-1) = -3.d0*y(m+1:n-1) - coop_lattice_fields_dVdphi(y(1:m))/y(n)
-    yp(n) = (1.d0/3.d0/coop_lattice_Mpsq) * (coop_lattice_fields_V(y(1:m)) - 2.d0*sum(y(m+1:n-1)**2)/2.d0)/y(n) - y(n)
+    m = n/2-1
+    yp(1:m) = y(m+1:2*m)
+    yp(m+1:2*m) = -3.d0*y(m+1:2*m)*y(n) - coop_lattice_fields_dVdphi(y(1:m))
+    yp(n-1) = y(n)
+    yp(n) = (-0.5d0/coop_lattice_Mpsq) * sum(y(m+1:2*m)**2)
   end subroutine coop_lattice_background_eqs
+
+  !!epsilon = -\dot H / H^2
+  function coop_lattice_background_epsilon(nflds, y) result(eps)
+    COOP_INT::nflds
+    COOP_REAL::eps, y(2*nflds+2)
+    eps = (0.5d0/coop_lattice_Mpsq) * sum(y(nflds+1:2*nflds)**2)/y(2*nflds+2)**2
+  end function coop_lattice_background_epsilon
+
+
+  !!total density
+  function coop_lattice_background_rhotot(nflds, y) result(rho)
+    COOP_INT::nflds
+    COOP_REAL::rho, y(2*nflds+2)
+    rho =  sum(y(nflds+1:2*nflds)**2)/2.d0 + coop_lattice_fields_V(y(1:nflds))
+  end function coop_lattice_background_rhotot
+
+  !!============================================================================
+
+
   
+
 end module coop_lattice_fields_mod
 
 
