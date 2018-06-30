@@ -5,32 +5,32 @@ module coop_list_mod
 #include "constants.h"
   private
 
-  public::coop_list_integer, coop_list_real, coop_list_realarr, coop_list_double, coop_list_logical, coop_list_string, coop_list_character, coop_string_to_list, coop_dictionary, coop_dictionary_lookup, coop_get_prime_numbers, coop_list_get_element,  coop_command_line_has_argument, coop_command_line_argument, coop_get_command_line_argument, coop_dynamic_array_integer, coop_int_table, coop_real_table, coop_int_set
+  public::coop_list_integer, coop_list_real, coop_list_realarr, coop_list_double, coop_list_doublearr, coop_list_logical, coop_list_string, coop_list_character, coop_string_to_list, coop_dictionary, coop_dictionary_lookup, coop_get_prime_numbers, coop_list_get_element,  coop_command_line_has_argument, coop_command_line_argument, coop_get_command_line_argument, coop_dynamic_array_integer, coop_int_table, coop_real_table, coop_int_set
 
   interface coop_list_initialize
-     module procedure coop_list_integer_initialize, coop_list_real_initialize, coop_list_double_initialize, coop_list_logical_initialize, coop_list_string_initialize, coop_list_character_initialize, coop_list_realarr_initialize
+     module procedure coop_list_integer_initialize, coop_list_real_initialize, coop_list_double_initialize, coop_list_logical_initialize, coop_list_string_initialize, coop_list_character_initialize, coop_list_realarr_initialize, coop_list_doublearr_initialize
   end interface coop_list_initialize
 
 
   interface coop_list_is_initialized
-     module procedure coop_list_integer_is_initialized, coop_list_real_is_initialized, coop_list_double_is_initialized, coop_list_logical_is_initialized, coop_list_string_is_initialized, coop_list_character_is_initialized, coop_list_realarr_is_initialized
+     module procedure coop_list_integer_is_initialized, coop_list_real_is_initialized, coop_list_double_is_initialized, coop_list_logical_is_initialized, coop_list_string_is_initialized, coop_list_character_is_initialized, coop_list_realarr_is_initialized, coop_list_doublearr_is_initialized
   end interface coop_list_is_initialized
 
   interface coop_list_push
-     module procedure coop_list_integer_push, coop_list_real_push, coop_list_double_push, coop_list_logical_push, coop_list_string_push, coop_list_character_push, coop_list_realarr_push
+     module procedure coop_list_integer_push, coop_list_real_push, coop_list_double_push, coop_list_logical_push, coop_list_string_push, coop_list_character_push, coop_list_realarr_push, coop_list_doublearr_push
   end interface coop_list_push
 
 
   interface coop_list_pop
-     module procedure coop_list_integer_pop, coop_list_real_pop, coop_list_double_pop, coop_list_logical_pop, coop_list_string_pop, coop_list_character_pop, coop_list_realarr_pop
+     module procedure coop_list_integer_pop, coop_list_real_pop, coop_list_double_pop, coop_list_logical_pop, coop_list_string_pop, coop_list_character_pop, coop_list_realarr_pop, coop_list_doublearr_pop
   end interface coop_list_pop
 
   interface coop_list_element
-     module procedure coop_list_integer_element, coop_list_real_element, coop_list_double_element, coop_list_logical_element, coop_list_string_element, coop_list_character_element, coop_list_realarr_element
+     module procedure coop_list_integer_element, coop_list_real_element, coop_list_double_element, coop_list_logical_element, coop_list_string_element, coop_list_character_element, coop_list_realarr_element, coop_list_doublearr_element
   end interface coop_list_element
 
   interface coop_list_get_element
-     module procedure coop_list_integer_get_element, coop_list_real_get_element, coop_list_double_get_element, coop_list_logical_get_element, coop_list_string_get_element, coop_list_character_get_element, coop_list_realarr_get_element
+     module procedure coop_list_integer_get_element, coop_list_real_get_element, coop_list_double_get_element, coop_list_logical_get_element, coop_list_string_get_element, coop_list_character_get_element, coop_list_realarr_get_element, coop_list_doublearr_get_element
   end interface coop_list_get_element
 
 
@@ -43,7 +43,7 @@ module coop_list_mod
   end interface coop_dictionary_lookup
 
   interface coop_get_command_line_argument
-     module procedure coop_get_command_line_argument_single, coop_get_command_line_argument_real, coop_get_command_line_argument_logical, coop_get_command_line_argument_int, coop_get_command_line_argument_str, coop_get_command_line_argument_intarr, coop_get_command_line_argument_realarr, coop_get_command_line_argument_singlearr
+     module procedure coop_get_command_line_argument_real, coop_get_command_line_argument_double, coop_get_command_line_argument_logical, coop_get_command_line_argument_int, coop_get_command_line_argument_str, coop_get_command_line_argument_intarr, coop_get_command_line_argument_doublearr, coop_get_command_line_argument_realarr
   end interface coop_get_command_line_argument
 
 
@@ -144,6 +144,28 @@ module coop_list_mod
      procedure::element => coop_list_double_element
      procedure::get_element => coop_list_double_get_element
   end type coop_list_double
+
+
+  type coop_list_doublearr
+     COOP_INT dim
+     COOP_INT::n = 0
+     COOP_INT::stack = 1
+     COOP_INT::loc = 0
+     COOP_REAL,dimension(:,:),allocatable::i1
+     COOP_REAL,dimension(:,:),allocatable::i2
+     COOP_REAL,dimension(:,:),allocatable::i3
+     COOP_REAL,dimension(:,:),allocatable::i4
+   contains
+     procedure::init => coop_list_doublearr_initialize     
+     procedure::free => coop_list_doublearr_initialize     
+     procedure::isinit => coop_list_doublearr_is_initialized
+     procedure::push => coop_list_doublearr_push
+     procedure::pop => coop_list_doublearr_pop
+     procedure::element => coop_list_doublearr_element
+     procedure::get_element => coop_list_doublearr_get_element
+     procedure::sort => coop_list_doublearr_sort
+  end type coop_list_doublearr
+  
 
   type coop_list_logical
      COOP_INT::n = 0
@@ -2070,7 +2092,7 @@ contains
 
 
 
-  subroutine coop_get_command_line_argument_real(index, key, arg, default)
+  subroutine coop_get_command_line_argument_double(index, key, arg, default)
     COOP_INT,optional::index
     COOP_UNKNOWN_STRING,optional::key
     COOP_REAL::arg
@@ -2101,12 +2123,12 @@ contains
           stop "cannot find the REAL argument in command line input"
        endif
     endif
-  end subroutine coop_get_command_line_argument_real
+  end subroutine coop_get_command_line_argument_double
 
 
 
 
-  subroutine coop_get_command_line_argument_realarr(index, key, arg, default)
+  subroutine coop_get_command_line_argument_doublearr(index, key, arg, default)
     COOP_INT,optional::index
     COOP_UNKNOWN_STRING,optional::key
     COOP_REAL,optional::default(:)
@@ -2138,11 +2160,11 @@ contains
        endif       
     endif
     read(str, *) arg
-  end subroutine coop_get_command_line_argument_realarr
+  end subroutine coop_get_command_line_argument_doublearr
   
 
 
-  subroutine coop_get_command_line_argument_single(index, key, arg, default)
+  subroutine coop_get_command_line_argument_real(index, key, arg, default)
     COOP_INT,optional::index
     COOP_UNKNOWN_STRING,optional::key
     COOP_SINGLE::arg
@@ -2173,11 +2195,11 @@ contains
           stop "cannot find the SINGLE argument in command line input"
        endif
     endif
-  end subroutine coop_get_command_line_argument_single
+  end subroutine coop_get_command_line_argument_real
 
 
 
-  subroutine coop_get_command_line_argument_singlearr(index, key, arg, default)
+  subroutine coop_get_command_line_argument_realarr(index, key, arg, default)
     COOP_INT,optional::index
     COOP_UNKNOWN_STRING,optional::key
     COOP_SINGLE,optional::default(:)
@@ -2209,7 +2231,7 @@ contains
        endif       
     endif
     read(str, *) arg
-  end subroutine coop_get_command_line_argument_singlearr
+  end subroutine coop_get_command_line_argument_realarr
   
 
   subroutine coop_int_table_load_dictionary(this, dict, copyall)
@@ -2782,6 +2804,175 @@ contains
     has = (this%x(ilow) .eq. x)
   end function coop_int_set_has
 
-End module coop_list_mod
 
 
+
+
+
+  subroutine coop_list_doublearr_initialize(l)
+    class(coop_list_doublearr) l
+    l%n = 0
+    l%stack = 1
+    l%loc = 0
+    COOP_DEALLOC(l%i4)
+    COOP_DEALLOC(l%i3)
+    COOP_DEALLOC(l%i2)
+    COOP_DEALLOC(l%i1)
+  end subroutine coop_list_doublearr_initialize
+  
+  function coop_list_doublearr_is_initialized(l) result(ini)
+    class(coop_list_doublearr) l
+    logical ini
+    ini = allocated(l%i1)
+  end function coop_list_doublearr_is_initialized
+
+
+
+  subroutine coop_list_doublearr_sort(this, key_index)
+    COOP_INT key_index
+    class(coop_list_doublearr) this
+    COOP_REAL, dimension(:),allocatable::key, tmp
+    type(coop_list_doublearr) copy
+    COOP_INT, dimension(:),allocatable::index
+    COOP_INT i, j
+    allocate(key(this%n), index(this%n), tmp(this%dim))
+    do i=1, this%n
+       call this%get_element(i, tmp)
+       key(i) = tmp(key_index)
+    enddo
+    call coop_quicksort_index(key, index)
+    select type(this)
+    type is(coop_list_doublearr)
+       copy = this
+       call this%init()
+       do i = 1, copy%n
+          call this%push(copy%element(index(i)))
+       enddo
+    end select
+    deallocate(key, index, tmp)
+  end subroutine coop_list_doublearr_sort
+
+
+  subroutine coop_list_doublearr_get_element(l, i, elem)
+    class(coop_list_doublearr) l
+    COOP_INT i, j
+    COOP_REAL elem(:)
+    if(i.le. coop_list_i1_max_length)then
+       elem(1:l%dim) = l%i1(:,i)
+       return
+    endif
+    j = i - coop_list_i1_max_length
+    if(j .le. coop_list_i2_max_length)then
+       elem(1:l%dim) = l%i2(:,j)
+       return
+    endif
+    j = j - coop_list_i2_max_length
+    if(j.le. coop_list_i3_max_length)then
+       elem(1:l%dim) = l%i3(:,j)
+       return
+    endif
+    elem(1:l%dim) = l%i4(:,j - coop_list_i3_max_length)
+    return
+  end subroutine coop_list_doublearr_get_element
+
+  function coop_list_doublearr_element(l, i) result(elem)
+    class(coop_list_doublearr) l
+    COOP_INT i, j
+    COOP_REAL elem(l%dim)
+    call coop_list_doublearr_get_element(l, i, elem)
+  end function coop_list_doublearr_element
+
+
+  
+  subroutine coop_list_doublearr_push(l, i)
+    class(coop_list_doublearr) l
+    COOP_REAL,dimension(:),intent(IN)::i
+    if(allocated(l%i1))then
+       if(size(i).ne. l%dim) stop "coop_list_doublearr_push: wrong size of input array"
+       l%n = l%n+1
+       select case(l%stack)
+       case(1)
+          if(l%loc .lt. coop_list_i1_max_length)then
+             l%loc = l%loc + 1
+             l%i1(:,l%loc) = i
+             return
+          else
+             l%loc = 1
+             l%stack = 2
+             allocate(l%i2(l%dim, coop_list_i2_max_length))
+             l%i2(:,1) = i
+             return
+          endif
+       case(2)
+          if(l%loc .lt. coop_list_i2_max_length)then
+             l%loc = l%loc + 1
+             l%i2(:,l%loc) = i
+             return
+          else
+             l%loc = 1
+             l%stack = 3
+             allocate(l%i3(l%dim, coop_list_i3_max_length))
+             l%i3(:,1) = i
+             return
+          endif
+       case(3)
+          if(l%loc .lt. coop_list_i3_max_length)then
+             l%loc = l%loc + 1
+             l%i3(:,l%loc) = i
+             return
+          else
+             l%loc = 1
+             l%stack = 4
+             allocate(l%i4(l%dim, coop_list_i4_max_length))
+             l%i4(:, 1) = i
+             return
+          endif
+       case(4)
+          if(l%loc .lt. coop_list_i4_max_length)then
+             l%loc = l%loc + 1
+             l%i4(:, l%loc) = i
+             return
+          else
+             write(*,*) "coop_list_doublearr_push: Coop_list over flow"
+             stop
+          endif
+       end select
+    else
+       l%dim = size(i)
+       allocate(l%i1(l%dim, coop_list_i1_max_length))
+       l%n = 1
+       l%stack = 1
+       l%loc = 1
+       l%i1(:,1) = i
+    endif
+  end subroutine coop_list_doublearr_push
+
+  subroutine coop_list_doublearr_pop(l)
+    class(coop_list_doublearr) l
+    if(allocated(l%i1))then
+       l%n = l%n-1
+       if(l%loc.gt.1)then
+          l%loc = l%loc-1
+          return
+       else
+          l%stack = l%stack - 1
+          select case(l%stack)
+          case(0)
+             l%loc = 0
+             deallocate(l%i1)
+          case(1)
+             l%loc = coop_list_i1_max_length
+             deallocate(l%i2)
+          case(2)
+             l%loc = coop_list_i2_max_length
+             deallocate(l%i3)
+          case(3)
+             l%loc = coop_list_i3_max_length
+             deallocate(l%i4)
+          end select
+       endif
+    endif
+  end subroutine coop_list_doublearr_pop
+
+
+End module coop_list_mod  

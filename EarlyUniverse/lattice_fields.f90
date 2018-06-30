@@ -9,7 +9,7 @@ module coop_lattice_fields_mod
 
 
   private
-  public:: coop_lattice_fields, coop_lattice_Mp, coop_lattice_Mpsq, coop_lattice_fields_V, coop_lattice_fields_dVdphi, coop_lattice_background_eqs, coop_lattice_background_epsilon,  coop_lattice_background_rhotot
+  public:: coop_lattice_fields, coop_lattice_Mp, coop_lattice_Mpsq, coop_lattice_fields_V, coop_lattice_fields_dVdphi, coop_lattice_background_eqs, coop_lattice_background_epsilon,  coop_lattice_background_rhotot, coop_lattice_initial_power, coop_inflation_background, coop_infbg
 
 
   !!M_p^2  = 1/(8\pi G); This just sets the program unit and in principle can be arbitrary.
@@ -22,7 +22,42 @@ module coop_lattice_fields_mod
   COOP_REAL, parameter::g2byl = 2.d0 !!g^2/lambda
   !!*****************************************************************
 
-  
+
+  type coop_inflation_background
+     COOP_INT::nflds = 0
+     COOP_INT::nsteps = 0
+     COOP_REAL,dimension(:),allocatable::lnH, eps, lna, lnH2, eps2
+     COOP_REAL,dimension(:,:),allocatable::f, fd, fdd, f2, fd2, fdd2, m2mat, m2mat2
+     COOP_REAL::lnHend, nefolds
+   contains
+     procedure::free => coop_inflation_background_free
+     procedure::alloc => coop_inflation_background_alloc
+     procedure::setup =>coop_inflation_background_setup
+     procedure::Hubble => coop_inflation_background_Hubble
+     procedure::epsilon => coop_inflation_background_epsilon
+     procedure::fields => coop_inflation_background_fields
+     procedure::dot_fields => coop_inflation_background_dot_fields
+     procedure::ddot_fields => coop_inflation_background_ddot_fields     
+     procedure::field => coop_inflation_background_field
+     procedure::dot_field => coop_inflation_background_dot_field
+     procedure::ddot_field => coop_inflation_background_ddot_field
+     procedure::msqs => coop_inflation_background_msqs
+     procedure::msq => coop_inflation_background_msq      
+  end type coop_inflation_background
+
+  type coop_lattice_initial_power
+     COOP_INT::nk = 0
+     COOP_INT::nflds = 0
+     logical::is_diagonal = .false.
+     COOP_REAL,dimension(:),allocatable::lnk
+     COOP_REAL,dimension(:,:,:),allocatable::f_cov, fd_cov
+   contains
+     procedure::free => coop_lattice_initial_power_free
+     procedure::alloc => coop_lattice_initial_power_alloc     
+     procedure::init => coop_lattice_initial_power_initialize
+  end type coop_lattice_initial_power
+
+
   type coop_lattice_fields
      COOP_INT::nflds = 0
      COOP_INT::n = 0
@@ -40,6 +75,7 @@ module coop_lattice_fields_mod
      COOP_REAL::KE, GE, PE,a, H !!normalize
      logical::expansion = .true.
    contains
+     procedure::scale_factor => coop_lattice_fields_scale_factor
      procedure::pi_y_constrained => coop_lattice_fields_pi_y_constrained
      procedure::set_pi_y => coop_lattice_fields_set_pi_y
      procedure::set_energies => coop_lattice_fields_set_energies     
@@ -60,6 +96,9 @@ module coop_lattice_fields_mod
      procedure::Potential_Energy => coop_lattice_fields_Potential_Energy
      procedure::Gradient_Energy => coop_lattice_fields_Gradient_Energy
   end type coop_lattice_fields
+
+
+  type(coop_inflation_background)::coop_infbg
 
 contains
 
@@ -316,25 +355,30 @@ contains
     this%H = sqrt((-this%pi_y**2/2.d0*GR_COEF)/this%y**(2.d0*(3.d0+this%mu)/(3.d0-this%mu))/3.d0/coop_lattice_Mpsq)
   end subroutine coop_lattice_fields_set_energies
 
-
+  function coop_lattice_fields_scale_factor(this) result(a)
+    class(coop_lattice_fields)::this
+    COOP_REAL::a
+    a = this%y**(2.d0/(3.d0-this%mu))
+  end function coop_lattice_fields_scale_factor
 
   !!set initial perturbatioins
   !!n: the box resolultion (n^3 grids)
   !!LH: the comoving boxsize in unit of (aH)^{-1}
   !!phi: initial background fields
-  !!pi: initial d phi/ dt
-  !!phi_sigma2: rms fluctuations at k = aH,
-  !!power_index (default 0): the tilt, k^3 P(k)/(2 \pi^2) = phi_sigma2 * k^{power_index} (similar to n_s-1 in cosmology)
+  !!pi: initial background d phi/ dt
+  !!
   !!use_conformal_time (default false): if true, use conformal time;  if false, use physical time; 
-  subroutine coop_lattice_fields_init(this, n, LH,  phi, pi, phi_sigma2, power_index, use_conformal_time)
+  subroutine coop_lattice_fields_init(this, n, LH,  phi, pi, inipower, use_conformal_time)
     class(coop_lattice_fields)::this
-    COOP_REAL::LH, phi(:), pi(:), phi_sigma2(:)
-    COOP_REAL,optional::power_index(:)
+    class(coop_lattice_initial_power)::inipower
+    COOP_REAL :: LH, phi(:), pi(:)
     COOP_INT::n
-    COOP_COMPLEX fk(0:n/2,0:n-1, 0:n-1)
-    COOP_REAL::ftmp(0:n-1, 0:n-1, 0:n-1), norm, phi_sigma, k2, k2_index(size(phi))
-    COOP_INT::i, j, k, fld
+    COOP_REAL::norm,  k2
+    COOP_COMPLEX,dimension(:,:,:,:), allocatable::fk, fdk
+    COOP_INT::i, j, k, fld, ik
     logical,optional::use_conformal_time
+    COOP_REAL::lnk, lndk, rk, Hubble
+
     call this%alloc(nflds = size(phi), n = n)
     if(present(use_conformal_time))then
        if(use_conformal_time)then
@@ -345,38 +389,51 @@ contains
     else
        this%mu = 0.d0
     endif
-    if(size(pi) .ne. this%nflds .or. size(phi_sigma2).ne. this%nflds)call coop_return_error("lattice_fields_init", "array sizes do not match", "stop")
-    this%L = LH/sqrt((coop_lattice_fields_V(phi) + sum(pi**2)/2.d0)/3.d0/coop_lattice_Mpsq)
+
+    if(  size(pi) .ne. this%nflds)call coop_return_error("lattice_fields_init", "array sizes do not match", "stop")
+    Hubble = sqrt((coop_lattice_fields_V(phi) + sum(pi**2)/2.d0)/3.d0/coop_lattice_Mpsq)
+    this%L = LH/Hubble
     this%dx = this%L / this%n
     this%dk = coop_2pi / this%L
+    lndk = log(this%dk/Hubble)
     this%kmax = this%n/2 * this%dk
     norm = 1.d0/sqrt(4.d0*coop_pi)    
-    if(present(power_index))then
-       if(size(power_index) .ne. this%nflds) call coop_return_error("lattice_fields_init", "array sizes do not match", "stop")
-       k2_index = (3.d0-power_index)/4.d0
+    if(inipower%is_diagonal)then
+       allocate(fk(0:this%n/2, 0:this%n-1, 0:this%n-1, 1), fdk(0:this%n/2, 0:this%n-1, 0:this%n-1, 1))
+       do fld = 1, this%nflds
+          do  k = 0, this%n-1; do j = 0, this%n-1; do i = 0, this%n/2
+             k2 = (min(dble(j), dble(this%n-j))**2  + min(dble(k), dble(this%n-k))**2 + dble(i)**2)
+             lnk = log(k2)/2.d0 + lndk
+             if(k2 .gt. 0.d0 .and. k2 .lt. (this%n*0.49999d0)**2)then
+                ik = coop_left_index(n, inipower%lnk, lnk)
+                if(ik .gt. 0 .and. ik .lt. inipower%nk)then
+                   rk = (inipower%lnk(ik+1)-lnk)/(inipower%lnk(ik+1)-inipower%lnk(ik))
+                   fk(i, j, k, 1) = norm*sqrt(inipower%f_cov(fld, fld, ik)*rk + inipower%f_cov(fld, fld, ik+1)*(1.d0-rk)) / k2**0.75d0 *  coop_random_complex_Gaussian()
+                   fdk(i, j, k, 1) = norm*sqrt(inipower%fd_cov(fld, fld, ik)*rk + inipower%fd_cov(fld, fld, ik+1)*(1.d0-rk)) / k2**0.75d0 *  coop_random_complex_Gaussian()                   
+                else
+                   fk(i, j, k,1) = 0.d0
+                   fdk(i, j, k,1) = 0.d0                   
+                endif
+             else
+                fk(i, j, k, :) = 0.d0
+                fdk(i, j, k,1) = 0.d0                                   
+             endif
+          enddo;enddo;enddo
+          fk(0,0,0,1) = phi(fld)
+          fdk(0,0,0,1) = pi(fld)
+          call fft_3d_backward(n, n, n, fk(:,:,:,1), this%f(fld, 0:this%n-1, 0:this%n-1, 0:this%n-1))
+          call fft_3d_backward(n, n, n, fdk(:,:,:,1), this%pi(fld, 0:this%n-1, 0:this%n-1, 0:this%n-1))          
+       enddo
+       deallocate(fk, fdk)
     else
-       k2_index = 3.d0/4.d0
+       stop "Non-diagonal initial conditions are not yet implemented."
     endif
-    do fld = 1, this%nflds
-       this%pi(fld, :,:,:) = pi(fld)
-       phi_sigma = sqrt(phi_sigma2(fld))*norm*(LH/coop_2pi)**(2.d0*k2_index(fld)-1.5)
-       do  k = 0, this%n-1; do j = 0, this%n-1; do i = 0, this%n/2
-          k2 = (min(dble(j), dble(this%n-j))**2  + min(dble(k), dble(this%n-k))**2 + dble(i)**2)
-          if(k2 .gt. 0.d0 .and. k2 .lt. (this%n*0.49d0)**2)then
-             fk(i, j, k) = phi_sigma/k2**k2_index(fld) *  coop_random_complex_Gaussian()
-          else
-             fk(i, j, k) = 0.d0
-          endif
-       enddo;enddo;enddo
-       call fft_3d_backward(n, n, n, fk, ftmp)
-       this%f(fld, 0:this%n-1, 0:this%n-1, 0:this%n-1) = ftmp + phi(fld)
-    enddo
     call this%wrap()
     this%y = 1.d0
     call this%set_pi_y()
   end subroutine coop_lattice_fields_init
 
-  !!================ utilities for background evolution ====================
+  !!================ utilities for background evolution ====================  
   ! n = 2 * nflds + 2
   !y: phi, dphi/dt, lna, H
   !yp: dy /d t
@@ -406,11 +463,317 @@ contains
     rho =  sum(y(nflds+1:2*nflds)**2)/2.d0 + coop_lattice_fields_V(y(1:nflds))
   end function coop_lattice_background_rhotot
 
-  !!============================================================================
+  subroutine coop_inflation_background_free(this)
+    class(coop_inflation_background)::this
+    if(this%nsteps .gt. 0 .and. this%nflds .gt. 0)then
+       deallocate(this%lna, this%lnH, this%eps, this%lnH2, this%eps2, this%f, this%fd, this%fdd, this%f2, this%fd2, this%fdd2, this%m2mat, this%m2mat2)
+     this%nsteps = 0
+     this%nflds = 0
+    endif
+  end subroutine coop_inflation_background_free
 
 
+  subroutine coop_inflation_background_alloc(this, nflds, nsteps)
+    class(coop_inflation_background)::this
+    COOP_INT::nflds, nsteps
+    if(this%nflds .ne. nflds .or. this%nsteps .ne. this%nsteps)then
+       call this%free()
+       allocate(this%lna(nsteps), this%lnH(nsteps), this%eps(nsteps), this%lnH2(nsteps), this%eps2(nsteps), this%f(nsteps, nflds), this%fd(nsteps,nflds), this%fdd(nsteps, nflds), this%f2(nsteps, nflds), this%fd2(nsteps, nflds), this%fdd2(nsteps, nflds), this%m2mat(nsteps, nflds*(nflds+1)/2), this%m2mat2(nsteps, nflds*(nflds+1)/2))
+       this%nflds = nflds
+       this%nsteps = nsteps       
+    endif
+  end subroutine coop_inflation_background_alloc
+
+  subroutine coop_inflation_background_setup(this, nflds, epsilon_end, f_ini, fd_ini)
+    class(coop_inflation_background)::this
+    COOP_INT::nflds
+    COOP_REAL::f_ini(nflds)
+    COOP_REAL,optional::fd_ini(nflds)
+    COOP_REAL::epsilon_end
+    type(coop_ode)::bg
+    !!other variables
+    COOP_REAL::Hini, dotf_ini(nflds)
+    COOP_REAL::y(nflds*2+2), dt, Vpp(nflds, nflds)
+    COOP_INT::i, j, istep, k
+    type(coop_list_double)::lnH, lna, eps
+    type(coop_list_doublearr)::f, fd, fdd
+    logical::eps_increase = .false.
+
+    !!===============initialize ODE solver============================
+    call bg%init(n=2*nflds+2, method=COOP_ODE_DVERK, tol=1.d-8)
+    !!=================set inital conditions =========================================
+    if(present(fd_ini))then
+       dotf_ini = fd_ini
+       Hini = sqrt(coop_lattice_fields_V(f_ini) + sum(dotf_ini**2)/2.d0)/(coop_sqrt3*coop_lattice_Mp)
+    else
+       !!slow-roll approximation
+       Hini = sqrt(coop_lattice_fields_V(f_ini))/(coop_sqrt3*coop_lattice_Mp)
+       dotf_ini  = coop_lattice_fields_dVdphi(f_ini)/(-3.d0*Hini)
+       !!iterate to get more accurate values
+       Hini = sqrt(coop_lattice_fields_V(f_ini) + sum(dotf_ini**2)/2.d0)/(coop_sqrt3*coop_lattice_Mp)
+       dotf_ini  = coop_lattice_fields_dVdphi(f_ini)/(-3.d0*Hini)
+       Hini = sqrt(coop_lattice_fields_V(f_ini) + sum(dotf_ini**2)/2.d0)/(coop_sqrt3*coop_lattice_Mp)
+    endif
+    y(1:nflds) = f_ini
+    y(nflds+1:2*nflds) = dotf_ini
+    y(2*nflds+1) = 0.d0  !!initial ln a = 0
+    y(2*nflds+2) = Hini
+    call bg%set_initial_conditions(xini = 0.d0, yini = y)
+    !!======================evolution=================================================
+#define LNA bg%y(2*nflds+1)
+#define HUBBLE bg%y(2*nflds+2)
+#define FIELDS bg%y(1:nflds)
+#define DOT_FIELDS    bg%y(nflds+1:2*nflds)
+    dt = 0.1/Hini
+    call lna%push(LNA)
+    call lnH%push(log(HUBBLE))
+    call eps%push(coop_lattice_background_epsilon(nflds, bg%y))
+    call f%push(FIELDS)
+    call fd%push(DOT_FIELDS)
+    call coop_lattice_background_eqs(bg%n, bg%x, bg%y, y)
+    call fdd%push(y(nflds+1:2*nflds))
+    
+    if(eps%element(1) .gt. epsilon_end) call coop_return_error("coop_inflation_background_setup",  "Initial epsilon overflow.", "stop")
+    do while(eps%element(eps%n) .lt. epsilon_end*0.9999d0)
+       if(eps_increase .and. eps%element(eps%n) .gt.  epsilon_end*0.5d0 )then
+          dt = max(min(0.3 * dt * (epsilon_end-eps%element(eps%n))/(eps%element(eps%n) - eps%element(eps%n-1)), 0.1d0/HUBBLE), 1.d-6/HUBBLE)
+       else
+          dt = 0.1/HUBBLE
+       endif
+       call bg%evolve(coop_lattice_background_eqs, bg%x+dt)
+       call lna%push(LNA)
+       call lnH%push(log(HUBBLE))
+       call eps%push(coop_lattice_background_epsilon(nflds, bg%y))
+       call f%push(FIELDS)
+       call fd%push(DOT_FIELDS)
+       call coop_lattice_background_eqs(bg%n, bg%x, bg%y, y)
+       call fdd%push(y(nflds+1:2*nflds))
+       eps_increase = (eps%element(eps%n) .gt. eps%element(eps%n-1) + 1.d-8)
+
+       if(abs(coop_lattice_background_rhotot(nflds, bg%y) /(3.d0*coop_lattice_Mpsq*HUBBLE**2) - 1.d0) .gt. 1.d-4) stop "energy conservation failed: check if you have a typo in include/lattice_fields_mode.h"
+
+    enddo
+    dt = dt * (epsilon_end - eps%element(eps%n))/(eps%element(eps%n) - eps%element(eps%n-1))
+    call bg%evolve(coop_lattice_background_eqs, bg%x+dt)
+    call lna%push(LNA)
+    call lnH%push(log(HUBBLE))
+    call eps%push(coop_lattice_background_epsilon(nflds, bg%y))
+    call f%push(FIELDS)
+    call fd%push(DOT_FIELDS)
+    call coop_lattice_background_eqs(bg%n, bg%x, bg%y, y)
+    call fdd%push(y(nflds+1:2*nflds))
+    
+#undef LNA
+#undef HUBBLE
+#undef FIELDS
+#undef DOT_FIELDS
+    call this%alloc(nflds = nflds, nsteps = lna%n)
+    do istep=1, lna%n
+       call lna%get_element(istep, this%lna(istep))
+       call lnH%get_element(istep, this%lnH(istep))
+       call eps%get_element(istep, this%eps(istep))
+       this%f(istep,:) = f%element(istep)
+       this%fd(istep,:) = fd%element(istep)
+       this%fdd(istep, :) = fdd%element(istep)
+       Vpp =  coop_lattice_fields_d2Vdphi2(this%f(istep,:))
+       do i=1, nflds
+          do j=1, i
+             this%m2mat(istep, COOP_MATSYM_INDEX(nflds, i, j))  = Vpp(i, j) - (this%fd(istep, i)*this%fd(istep,j)*(3.d0-this%eps(istep)) + (this%fd(istep,i)*this%fdd(istep,j) + this%fd(istep,j)*this%fdd(istep,i))/exp(this%lnH(istep)))/coop_lattice_Mpsq
+             Vpp(j, i) = Vpp(i, j)
+          enddo
+       enddo
+    enddo
+    this%lna = this%lna - this%lna(this%nsteps)
+    call coop_spline(this%nsteps, this%lna, this%eps, this%eps2)
+    call coop_spline(this%nsteps, this%lna, this%lnH, this%lnH2)
+    do i=1, nflds
+       call coop_spline(this%nsteps, this%lna, this%f(:,i), this%f2(:,i))
+       call coop_spline(this%nsteps, this%lna, this%fd(:,i), this%fd2(:,i))
+       call coop_spline(this%nsteps, this%lna, this%fdd(:,i), this%fdd2(:,i))  
+    enddo
+    do i=1, nflds*(nflds+1)/2
+       call coop_spline(this%nsteps, this%lna, this%m2mat(:, i), this%m2mat2(:, i))
+    enddo
+    this%lnHend = this%lnH(this%nsteps)
+    this%nefolds = - this%lna(1)
+    call bg%free()
+    call lna%free()
+    call lnH%free()
+    call eps%free()
+    call f%free()
+    call fd%free()
+    call fdd%free()
+  end subroutine coop_inflation_background_setup
+
+  function coop_inflation_background_Hubble(this, lna) result(H)
+    class(coop_inflation_background)::this
+    COOP_REAL::lna, H
+    call coop_splint(this%nsteps, this%lna, this%lnH, this%lnH2, lna, H)
+    H = exp(H)
+  end function coop_inflation_background_Hubble
+
+  function coop_inflation_background_epsilon(this, lna) result(eps)
+    class(coop_inflation_background)::this
+    COOP_REAL::lna, eps
+    call coop_splint(this%nsteps, this%lna, this%eps, this%eps2, lna, eps)
+  end function coop_inflation_background_epsilon
+
+  function coop_inflation_background_fields(this, lna) result(f)
+    class(coop_inflation_background)::this
+    COOP_REAL::lna, f(this%nflds)
+    COOP_INT::i
+    do i=1, this%nflds
+       call coop_splint(this%nsteps, this%lna, this%f(:, i), this%f2(:, i), lna, f(i))
+    enddo
+  end function coop_inflation_background_fields
+
+
+  function coop_inflation_background_dot_fields(this, lna) result(fd)
+    class(coop_inflation_background)::this
+    COOP_REAL::lna, fd(this%nflds)
+    COOP_INT::i
+    do i=1, this%nflds
+       call coop_splint(this%nsteps, this%lna, this%fd(:, i), this%fd2(:, i), lna, fd(i))
+    enddo
+  end function coop_inflation_background_dot_fields
+
+
+  function coop_inflation_background_ddot_fields(this, lna) result(fdd)
+    class(coop_inflation_background)::this
+    COOP_REAL::lna, fdd(this%nflds)
+    COOP_INT::i
+    do i=1, this%nflds
+       call coop_splint(this%nsteps, this%lna, this%fdd(:, i), this%fdd2(:, i), lna, fdd(i))
+    enddo
+  end function coop_inflation_background_ddot_fields
+
+
+  function coop_inflation_background_msqs(this, lna) result(msqs)
+    class(coop_inflation_background)::this
+    COOP_REAL::lna, msqs(this%nflds, this%nflds)
+    COOP_INT::i, j, k
+    do i=1, this%nflds
+       do j=1, i
+          k = COOP_MATSYM_INDEX(this%nflds, i, j)
+          call coop_splint(this%nsteps, this%lna, this%m2mat(:, k), this%m2mat2(:, k), lna, msqs(i,j))
+          msqs(j, i) = msqs(i, j)
+       enddo
+    enddo
+  end function coop_inflation_background_msqs
+
+
+    function coop_inflation_background_field(this, lna, i) result(f)
+    class(coop_inflation_background)::this
+    COOP_REAL::lna, f
+    COOP_INT::i
+    call coop_splint(this%nsteps, this%lna, this%f(:, i), this%f2(:, i), lna, f)
+  end function coop_inflation_background_field
+
+
+  function coop_inflation_background_dot_field(this, lna, i) result(fd)
+    class(coop_inflation_background)::this
+    COOP_REAL::lna, fd
+    COOP_INT::i
+    call coop_splint(this%nsteps, this%lna, this%fd(:, i), this%fd2(:, i), lna, fd)
+  end function coop_inflation_background_dot_field
+
+
+  function coop_inflation_background_ddot_field(this, lna, i) result(fdd)
+    class(coop_inflation_background)::this
+    COOP_REAL::lna, fdd
+    COOP_INT::i
+    call coop_splint(this%nsteps, this%lna, this%fd(:, i), this%fd2(:, i), lna, fdd)
+  end function coop_inflation_background_ddot_field
+  
   
 
+  function coop_inflation_background_msq(this, lna, i, j) result(msq)
+    class(coop_inflation_background)::this
+    COOP_REAL::lna, msq
+    COOP_INT::i, j
+    call coop_splint(this%nsteps, this%lna, this%m2mat(:, COOP_MATSYM_INDEX(this%nflds, i, j)), this%m2mat2(:, COOP_MATSYM_INDEX(this%nflds, i, j)), lna, msq)
+  end function coop_inflation_background_msq
+  
+  
+
+  !!================ utilities for perturbation evolution ====================  
+
+  subroutine coop_lattice_initial_power_free(this)
+    class(coop_lattice_initial_power)::this
+    COOP_DEALLOC(this%lnk)
+    COOP_DEALLOC(this%f_cov)
+    COOP_DEALLOC(this%fd_cov)
+    this%nk = 0
+    this%nflds = 0
+  end subroutine coop_lattice_initial_power_free
+
+
+  subroutine coop_lattice_initial_power_alloc(this, nk, nflds)
+    class(coop_lattice_initial_power)::this
+    COOP_INT::nk, nflds
+    call this%free()
+    this%nk = nk
+    this%nflds = nflds
+    allocate(this%lnk(nk), this%f_cov(nflds, nflds, nk), this%fd_cov(nflds, nflds, nk))
+  end subroutine coop_lattice_initial_power_alloc
+  
+
+
+  subroutine coop_lattice_initial_power_initialize(this, lnkmin, lnkmax, is_diagonal)
+    class(coop_lattice_initial_power)::this
+    logical, optional::is_diagonal
+    COOP_REAL::lnkmin, lnkmax
+    type(coop_ode)::pert_r, pert_i
+    COOP_REAL::ini_r(2*coop_intbg%nflds), ini_i(2*coop_intbg%nflds), lna
+    COOP_INT::ik
+    type(coop_arguments)::args
+    if(coop_intbg%nflds .eq. 0 .or. coop_intbg%nk .eq. 0) call coop_return_error("coop_lattice_initial_power_initialize", "You need to set up inflation background before calculating perturbations", "stop")
+    if(lnkmin .lt. coop_intbg%lnHend-coop_intbg%nefolds+2.d0 .or. lnkmax .gt. coop_intbg%lnHend )then
+       write(*, "(A)") "lnk out of range (of computed background)"
+       write(*,"(A, E16.7)") "recommended lnkmax:", coop_intbg%lnHend
+       write(*,"(A, E16.7)") "recommended lnkmin:", coop_intbg%lnHend-coop_intbg%nefolds+3.d0       
+    endif
+    call coop_set_uniform(nk, this%lnk, lnkmin, lnkmax)
+    if(present(is_diagonal))then
+       this%is_diagonal = is_diagonal
+    else
+       this%is_diagonal = .true.
+    endif
+    call pert_r%init(n=2*coop_intbg%nflds*2, method = COOP_ODE_DVERK, tol = 1.d-7)
+    call pert_i%init(n=2*coop_intbg%nflds*2, method = COOP_ODE_DVERK, tol = 1.d-7)       
+    do ik=1, this%nk
+       call args%init( r= (/ exp(this%lnk(ik)*2.d0) /) )
+       call pert_r%set_arguments(args)
+       call pert_i%set_arguments(args)
+       lna = this%lnk(ik) - coop_intbg%lnHend-3.d0
+       ini_r(1:coop_intbg%nflds) = (1.d0/coop_sqrt2)*exp(-this%lnk(ik)/2.d0-lna)
+       ini_r(coop_intbg%nflds+1:2*coop_intbg%nflds) = 0.d0
+       ini_i(1:coop_intbg%nflds) = 0.d0
+       ini_i(coop_intbg%nflds+1:2*coop_intbg%nflds) = (1.d0/coop_sqrt2)*exp(this%lnk(ik)/2.d0-2.d0*lna)
+       call pert_r%set_initial_conditions(xini = lna, yini = ini_r)
+       call pert_i%set_initial_conditions(xini = lna, yini = ini_i)
+       call pert_r%evolve(coop_lattice_perturb_eqs, 0.d0)
+       call pert_i%evolve(coop_lattice_perturb_eqs, 0.d0)       
+    enddo
+  end subroutine coop_lattice_initial_power_initialize
+
+  !!y(1:nflds): \delta\phi
+  !!y(nflds+1:2*nflds): \dot{\delta\phi}
+  subroutine coop_lattice_perurb_eqs(n, lna, y, yp, args)
+    COOP_INT::n, i
+    type(coop_arguments)::args
+#define KSQ  args%r(1)    
+    COOP_REAL::y(n), yp(n), lna, H, msqs(n/2, n/2)
+    H = coop_infbg%Hubble(lna)
+    yp(1:n/2) = y(n/2+1:n)/H
+    msqs = coop_infbg%msqs(lna)
+    do i=1, n/2
+       msqs(i, i) = msqs(i, i) + KSQ*exp(-2.d0*lna)
+    enddo
+    yp(n/2+1:n) = -3.d0*y(n/2+1:n) - matmul(msqs, y(1:n/2))/H    
+#undef KSQ    
+  end subroutine coop_lattice_perurb_eqs
+  
 end module coop_lattice_fields_mod
 
 

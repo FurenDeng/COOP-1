@@ -15,13 +15,14 @@
   end function coop_lattice_fields_dVdphi
 
 !!second derivatives   
-  function coop_lattice_fields_masses(phi) result(masses)
-    COOP_REAL::phi(:), masses(size(phi), size(phi))
-    masses(1,1) = (3.d0*PHI**2 + g2byl * CHI**2) * lambda
-    masses(2,2) = (g2byl*lambda)*PHI**2
-    masses(1,2) = (2.d0*g2byl*lambda)*PHI*CHI
-    masses(2,1) = masses(1,2)
-  end function coop_lattice_fields_masses
+  function coop_lattice_fields_d2Vdphi2(phi) result(d2Vdphi2)
+    COOP_REAL::phi(:)
+    COOP_REAL::d2Vdphi2(size(phi), size(phi))
+    d2Vdphi2(1,1) = (3.d0*PHI**2 + g2byl * CHI**2) * lambda
+    d2Vdphi2(2,2) = (g2byl*lambda)*PHI**2
+    d2Vdphi2(1,2) = (2.d0*g2byl*lambda)*PHI*CHI
+    d2Vdphi2(2,1) = d2Vdphi2(1,2)
+  end function coop_lattice_fields_d2Vdphi2
   
 #undef PHI
 #undef CHI  
