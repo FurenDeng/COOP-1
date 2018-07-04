@@ -48,9 +48,10 @@ module coop_lattice_fields_mod
   type coop_lattice_initial_power
      COOP_INT::nk = 0
      COOP_INT::nflds = 0
-     logical::is_diagonal = .false.
+     logical::is_diagonal = .true.
      COOP_REAL,dimension(:),allocatable::lnk
-     COOP_REAL,dimension(:,:,:),allocatable::f_cov, fd_cov
+     COOP_COMPLEX,dimension(:, :),allocatable::fdbyf
+     COOP_REAL,dimension(:,:,:),allocatable::f_cov
    contains
      procedure::free => coop_lattice_initial_power_free
      procedure::alloc => coop_lattice_initial_power_alloc     
@@ -395,9 +396,9 @@ contains
     this%L = LH/Hubble
     this%dx = this%L / this%n
     this%dk = coop_2pi / this%L
-    lndk = log(this%dk/Hubble)
+    lndk = log(this%dk)
     this%kmax = this%n/2 * this%dk
-    norm = 1.d0/sqrt(4.d0*coop_pi)    
+    norm = 1.d0/sqrt(4.d0*coop_pi)
     if(inipower%is_diagonal)then
        allocate(fk(0:this%n/2, 0:this%n-1, 0:this%n-1, 1), fdk(0:this%n/2, 0:this%n-1, 0:this%n-1, 1))
        do fld = 1, this%nflds
@@ -409,13 +410,13 @@ contains
                 if(ik .gt. 0 .and. ik .lt. inipower%nk)then
                    rk = (inipower%lnk(ik+1)-lnk)/(inipower%lnk(ik+1)-inipower%lnk(ik))
                    fk(i, j, k, 1) = norm*sqrt(inipower%f_cov(fld, fld, ik)*rk + inipower%f_cov(fld, fld, ik+1)*(1.d0-rk)) / k2**0.75d0 *  coop_random_complex_Gaussian()
-                   fdk(i, j, k, 1) = norm*sqrt(inipower%fd_cov(fld, fld, ik)*rk + inipower%fd_cov(fld, fld, ik+1)*(1.d0-rk)) / k2**0.75d0 *  coop_random_complex_Gaussian()                   
+                   fdk(i, j, k, 1) =  fk(i, j, k, 1) * (inipower%fdbyf(fld, ik)*rk + inipower%fdbyf(fld, ik+1)*(1.d0-rk))
                 else
                    fk(i, j, k,1) = 0.d0
                    fdk(i, j, k,1) = 0.d0                   
                 endif
              else
-                fk(i, j, k, :) = 0.d0
+                fk(i, j, k, 1) = 0.d0
                 fdk(i, j, k,1) = 0.d0                                   
              endif
           enddo;enddo;enddo
@@ -702,7 +703,7 @@ contains
     class(coop_lattice_initial_power)::this
     COOP_DEALLOC(this%lnk)
     COOP_DEALLOC(this%f_cov)
-    COOP_DEALLOC(this%fd_cov)
+    COOP_DEALLOC(this%fdbyf)
     this%nk = 0
     this%nflds = 0
   end subroutine coop_lattice_initial_power_free
@@ -714,65 +715,112 @@ contains
     call this%free()
     this%nk = nk
     this%nflds = nflds
-    allocate(this%lnk(nk), this%f_cov(nflds, nflds, nk), this%fd_cov(nflds, nflds, nk))
+    allocate(this%lnk(nk), this%f_cov(nflds, nflds, nk), this%fdbyf(nflds, nk))
   end subroutine coop_lattice_initial_power_alloc
   
 
 
   subroutine coop_lattice_initial_power_initialize(this, lnkmin, lnkmax, is_diagonal)
+    COOP_INT,parameter::n_trials = 100
     class(coop_lattice_initial_power)::this
     logical, optional::is_diagonal
-    COOP_REAL::lnkmin, lnkmax
+    COOP_REAL::lnkmin, lnkmax, omega
     type(coop_ode)::pert_r, pert_i
-    COOP_REAL::ini_r(2*coop_intbg%nflds), ini_i(2*coop_intbg%nflds), lna
-    COOP_INT::ik
+    COOP_REAL::ini_r(2*coop_infbg%nflds), ini_i(2*coop_infbg%nflds), lna, msq, kbya, kbyasq, maxmsq, amp, theta
+    COOP_INT::ik, i, j, n_seeds, fld
     type(coop_arguments)::args
-    if(coop_intbg%nflds .eq. 0 .or. coop_intbg%nk .eq. 0) call coop_return_error("coop_lattice_initial_power_initialize", "You need to set up inflation background before calculating perturbations", "stop")
-    if(lnkmin .lt. coop_intbg%lnHend-coop_intbg%nefolds+2.d0 .or. lnkmax .gt. coop_intbg%lnHend )then
+    if(coop_infbg%nflds .eq. 0 .or. coop_infbg%nsteps .eq. 0) call coop_return_error("coop_lattice_initial_power_initialize", "You need to set up inflation background before calculating perturbations", "stop")
+    if(lnkmin .lt. coop_infbg%lnHend-coop_infbg%nefolds+2.01d0 )then
        write(*, "(A)") "lnk out of range (of computed background)"
-       write(*,"(A, E16.7)") "recommended lnkmax:", coop_intbg%lnHend
-       write(*,"(A, E16.7)") "recommended lnkmin:", coop_intbg%lnHend-coop_intbg%nefolds+3.d0       
+       write(*,"(A, E16.7)") "minimum lnkmin:", coop_infbg%lnHend-coop_infbg%nefolds+2.01d0       
     endif
-    call coop_set_uniform(nk, this%lnk, lnkmin, lnkmax)
+    call coop_set_uniform(this%nk, this%lnk, lnkmin, lnkmax)
     if(present(is_diagonal))then
        this%is_diagonal = is_diagonal
     else
        this%is_diagonal = .true.
     endif
-    call pert_r%init(n=2*coop_intbg%nflds*2, method = COOP_ODE_DVERK, tol = 1.d-7)
-    call pert_i%init(n=2*coop_intbg%nflds*2, method = COOP_ODE_DVERK, tol = 1.d-7)       
-    do ik=1, this%nk
-       call args%init( r= (/ exp(this%lnk(ik)*2.d0) /) )
-       call pert_r%set_arguments(args)
-       call pert_i%set_arguments(args)
-       lna = this%lnk(ik) - coop_intbg%lnHend-3.d0
-       ini_r(1:coop_intbg%nflds) = (1.d0/coop_sqrt2)*exp(-this%lnk(ik)/2.d0-lna)
-       ini_r(coop_intbg%nflds+1:2*coop_intbg%nflds) = 0.d0
-       ini_i(1:coop_intbg%nflds) = 0.d0
-       ini_i(coop_intbg%nflds+1:2*coop_intbg%nflds) = (1.d0/coop_sqrt2)*exp(this%lnk(ik)/2.d0-2.d0*lna)
-       call pert_r%set_initial_conditions(xini = lna, yini = ini_r)
-       call pert_i%set_initial_conditions(xini = lna, yini = ini_i)
-       call pert_r%evolve(coop_lattice_perturb_eqs, 0.d0)
-       call pert_i%evolve(coop_lattice_perturb_eqs, 0.d0)       
-    enddo
+    if(this%is_diagonal)then
+       this%f_cov = 0.
+       this%fdbyf = 0.
+       call pert_r%init(n=2, method=COOP_ODE_DVERK, tol = 1.d-7)
+       call pert_i%init(n=2, method=COOP_ODE_DVERK, tol = 1.d-7)
+       do ik = 1, this%nk
+          do fld = 1, coop_infbg%nflds
+             lna = this%lnk(ik) - coop_infbg%lnHend-2.d0
+             kbya = exp(this%lnk(ik)-lna)
+             kbyasq = kbya ** 2
+             maxmsq = kbyasq*100.d0             
+             msq = coop_infbg%msq(lna, fld, fld)
+             if(msq .gt. maxmsq) cycle  !!ignroe heavy fields
+             if(msq .lt. -kbyasq*0.99)then
+                write(*,*) "tachyonic field", fld
+                write(*,*) "m^2 = ", msq
+                write(*,*) "ln a = ", lna
+                call coop_return_error("coop_lattice_initial_power_initialize", "not sure how to set initial conditions for tachyonic field(s)", "stop")
+             endif
+             omega =  sqrt(kbyasq+msq)             
+             if(this%lnk(ik) .gt. coop_infbg%lnHend)then
+                this%f_cov(fld, fld, ik) = kbya**3/coop_2pi**2/omega
+                this%fdbyf(fld, ik) = cmplx(0.d0, -omega)
+                cycle
+             endif
+             call args%init( r = (/ exp(this%lnk(ik)*2.d0) /), i = (/ fld  /) )
+             call pert_r%set_arguments(args)
+             call pert_i%set_arguments(args)
+             ini_r(1) = kbya**1.5/coop_2pi/sqrt(omega)
+             ini_r(2) = 0.d0
+             ini_i(1) = 0.d0
+             ini_i(2) = -omega*ini_r(1)
+             call pert_r%set_initial_conditions(xini = lna, yini = ini_r(1:2))
+             call pert_i%set_initial_conditions(xini = lna, yini = ini_i(1:2))
+             call pert_r%evolve(coop_lattice_perturb_diag_eqs, 0.d0)
+             call pert_i%evolve(coop_lattice_perturb_diag_eqs, 0.d0)
+             this%f_cov(fld, fld, ik)  = pert_r%y(1) * pert_r%y(1) + pert_i%y(1) * pert_i%y(1)
+             this%fdbyf(fld, ik) = cmplx(pert_r%y(2), pert_i%y(2))/cmplx(pert_r%y(1), pert_i%y(1))
+          enddo
+       enddo
+    else
+       call coop_return_error("coop_lattice_initial_power_initialize", "non-diagonal initial conditions are not implemented yet", "stop")
+    endif
   end subroutine coop_lattice_initial_power_initialize
 
   !!y(1:nflds): \delta\phi
   !!y(nflds+1:2*nflds): \dot{\delta\phi}
-  subroutine coop_lattice_perurb_eqs(n, lna, y, yp, args)
+  subroutine coop_lattice_perturb_eqs(n, lna, y, yp, args)
     COOP_INT::n, i
     type(coop_arguments)::args
 #define KSQ  args%r(1)    
-    COOP_REAL::y(n), yp(n), lna, H, msqs(n/2, n/2)
+    COOP_REAL::y(n), yp(n), lna, H, msqs(n/2, n/2), kbya2
     H = coop_infbg%Hubble(lna)
     yp(1:n/2) = y(n/2+1:n)/H
     msqs = coop_infbg%msqs(lna)
+    kbya2 = KSQ*exp(-2.d0*lna)
     do i=1, n/2
-       msqs(i, i) = msqs(i, i) + KSQ*exp(-2.d0*lna)
+       msqs(i, i) = msqs(i, i) + kbya2 
     enddo
     yp(n/2+1:n) = -3.d0*y(n/2+1:n) - matmul(msqs, y(1:n/2))/H    
 #undef KSQ    
-  end subroutine coop_lattice_perurb_eqs
+  end subroutine coop_lattice_perturb_eqs
+
+
+  !!args%i(1): i
+  !!y(1): \delta\phi_i
+  !!y(2): \dot{\delta\phi_i}
+  subroutine coop_lattice_perturb_diag_eqs(n, lna, y, yp, args)
+    COOP_INT::n, i
+    type(coop_arguments)::args
+#define KSQ  args%r(1)
+#define IND args%i(1)    
+    COOP_REAL::y(2), yp(2), lna, H, msq
+    H = coop_infbg%Hubble(lna)
+    yp(1) = y(2)/H
+    msq = coop_infbg%msq(lna, IND, IND)
+    yp(2) = -3.d0*y(2) - (KSQ*exp(-2.d0*lna) + msq)*y(1)/H
+#undef KSQ
+#undef IND    
+  end subroutine coop_lattice_perturb_diag_eqs
+  
   
 end module coop_lattice_fields_mod
 
