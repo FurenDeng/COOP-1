@@ -17,7 +17,11 @@ module coop_ellipse_collapse_mod
   type coop_ellipse_collapse_params
      COOP_REAL,dimension(3)::lambda = (/ 0.d0, 0.d0, 0.d0 /) !!lambda's
      COOP_REAL::Omega_m = 0.3d0  !!fractional matter density
-     COOP_REAL::w = -1.d0   !!dark energy EOS
+     !!dark energy EOS  w+ wa(1-a)     
+     COOP_REAL::w = -1.d0   
+     COOP_REAL::wa = 0.d0
+     !!if set to nonzero, ignore w, wa and use HBK one-parameter parametrization (Huang, Bond, Kofman 2011, ApJ)
+     COOP_REAL::epsilon_s = 0.d0 
      COOP_REAL::Omega_r, Omega_de
      COOP_REAL::Omega_k = 0.d0
      COOP_REAL::h = 0.7d0
@@ -70,10 +74,17 @@ contains
     COOP_REAL::a, y(n), dyda(n), dadt, bprime(3), growthD, delta, dark_Energy_term, rhomby3, radiation_term, delta_plus_1
     type(coop_ellipse_collapse_params)::params
     COOP_REAL,parameter::eps = coop_ellipse_collapse_accuracy
-    COOP_REAL::suppression_factor, arat(3)
+    COOP_REAL::suppression_factor, arat(3), aeq
     dadt = params%dadt(a)
     radiation_term = - params%omega_r/a**4*2.d0
-    dark_Energy_term =  - params%omega_de*a**(-3.d0*(1.d0+params%w))*(1.d0+3.d0*params%w)  !!dark energy contribution; ignore dark energy perturbations in wCDM
+    !!dark energy contribution; ignore dark energy perturbations in wCDM    
+    if(params%epsilon_s .ne. 0)then
+       aeq = (params%Omega_m/params%omega_de)**(1.d0/(3.d0-1.08*(1.d0-params%omega_m)*params%epsilon_s))  !!see Huang, Bond, Kofman, 2011 ApJ
+
+       dark_Energy_term = - params%omega_de*fit_HBK_rho_DE_ratio(params%epsilon_s, aeq, a)*(1.d0+3.d0*HBK_w(params%epsilon_s, aeq, a))
+    else       
+       dark_Energy_term =  - params%omega_de*a**(-3.d0*(1.d0+params%w+params%wa))*exp(-3.d0*params%wa*(1.d0-a))*(1.d0+3.d0*(params%w+params%wa*(1.d0-a)))  
+    endif
     if(params%is_spherical)then
        arat(1) = (y(1)/a/params%collapse_a_ratio(1) - 1.d0)/eps
        if(arat(1) .lt. -1.d0 .and. y(4) .lt. 0.d0)then  !!collapsed; freeze it
@@ -304,12 +315,12 @@ contains
 
 
 
-  subroutine coop_ellipse_collapse_params_init(this, Omega_m, w, h, Omega_k, lambda, F_pk, e_nu, p_nu)
+  subroutine coop_ellipse_collapse_params_init(this, Omega_m, w, wa, epsilon_s, h, Omega_k, lambda, F_pk, e_nu, p_nu)
     class(coop_ellipse_collapse_params)::this
     COOP_INT,parameter::na = 256
     COOP_REAL::a(na), Dbya(na), Dbyadot(na), adynamic
     COOP_INT::i
-    COOP_REAL,optional::Omega_m, w, Omega_k, h, lambda(3), F_pk, e_nu, p_nu
+    COOP_REAL,optional::Omega_m, w, wa, epsilon_s, Omega_k, h, lambda(3), F_pk, e_nu, p_nu
     logical cosmology_updated
     !!!!for D(a) solver
     COOP_REAL::y(2)  
@@ -337,6 +348,18 @@ contains
           cosmology_updated = .true.
        endif
     endif
+    if(present(wa))then
+       if(abs(this%wa - wa) .gt. 1.d-5)then
+          this%wa = wa
+          cosmology_updated = .true.
+       endif
+    endif
+    if(present(epsilon_s))then
+       if(abs(this%epsilon_s - epsilon_s) .gt. 1.d-5)then
+          this%epsilon_s = epsilon_s
+          cosmology_updated = .true.
+       endif
+    endif    
     if(present(h))then
        if(abs(this%h - h) .gt. 1.d-5)then
           this%h = h
@@ -419,15 +442,26 @@ contains
   !! H a / (H_0 a_0)
   function coop_ellipse_collapse_params_aH(this, a) result(aH)
     class(coop_ellipse_collapse_params)::this
-    COOP_REAL::a, aH
-    aH = sqrt(this%Omega_k + (this%Omega_m+this%Omega_r/a)/a + this%omega_de*a**(-1.d0-3.d0*this%w))
+    COOP_REAL::a, aH, aeq
+    if(this%epsilon_s .ne. 0.d0)then
+       aeq = (this%Omega_m/this%omega_de)**(1.d0/(3.d0-1.08*(1.d0-this%omega_m)*this%epsilon_s))  !!see Huang, Bond, Kofman, 2011 ApJ
+       if(aeq .lt. 0.1 .or. aeq .gt. 0.99) stop "Bad arguments for HBK parametrization. Are you using a very large epsilon_s? "
+       aH = sqrt(this%Omega_k + (this%Omega_m+this%Omega_r/a)/a + this%omega_de*fit_HBK_rho_DE_ratio(this%epsilon_s, aeq, a)*a**2)        
+    else
+       aH = sqrt(this%Omega_k + (this%Omega_m+this%Omega_r/a)/a + this%omega_de*a**(-1.d0-3.d0*(this%w+this%wa))*exp(-3.d0*this%wa*(1.d0-a)))
+    endif
   end function coop_ellipse_collapse_params_aH
 
 !!return H_0^2  \ddot a / a
   function coop_ellipse_collapse_params_ddotabya(this, a) result(ddotabya)
     class(coop_ellipse_collapse_params)::this
-    COOP_REAL::a, ddotabya
-    ddotabya = -( (this%Omega_r/a*2.d0 + this%Omega_m)/a**3 + this%Omega_de*a**(-3.d0*(1.d0+this%w))*(1.d0+3.d0*this%w) )/2.d0
+    COOP_REAL::a, ddotabya, aeq
+    if(this%epsilon_s .ne. 0.d0)then
+       aeq = (this%Omega_m/this%omega_de)**(1.d0/(3.d0-1.08*(1.d0-this%omega_m)*this%epsilon_s))  !!see Huang, Bond, Kofman, 2011 ApJ              
+       ddotabya = -( (this%Omega_r/a*2.d0 + this%Omega_m)/a**3 + this%Omega_de*fit_HBK_rho_DE_ratio(this%epsilon_s, aeq, a)*(1.d0+3.d0*HBK_w(this%epsilon_s, aeq, a)) )/2.d0
+    else
+       ddotabya = -( (this%Omega_r/a*2.d0 + this%Omega_m)/a**3 + this%Omega_de*a**(-3.d0*(1.d0+this%w+this%wa))*exp(-3.d0*this%wa*(1.d0-a))*(1.d0+3.d0*(this%w+this%wa*(1.d0-a))) )/2.d0
+    endif
   end function coop_ellipse_collapse_params_ddotabya
 
   subroutine coop_ellipse_collapse_params_free(this)
@@ -456,5 +490,37 @@ contains
     endif
     bprime = (coop_elliptic_Rd(1.d0/lambda1, 1.d0/lambda2, 1.d0)/sqrt(lambda1*lambda2)-1.d0)*2.d0/3.d0
   end function coop_ellipse_collapse_bprime_reduced
+
+  !!return rhoDE(a) / rhoDE_0
+  function fit_HBK_rho_DE_ratio(epsilon_s, aeq, a) result(rat)
+    COOP_REAL::a, aeq, epsilon_s, rat
+    rat = exp(2.d0*epsilon_s*(fit(1.d0/aeq) - fit(a/aeq)))
+  contains
+    function fit(x)
+      COOP_REAL::x, fit
+      COOP_REAL,parameter::x1 = 1.49d0, x2 = 1.51d0
+      if(x.lt. x1)then
+         fit = x**3*(4.d0/27.d0)/(1.d0+0.3d0*x**3)*(1.d0+x**4.95*0.02)
+      elseif(x .gt. x2)then
+         fit = log(x+0.6d0/x**0.9) - 0.37123
+      else
+         fit = ((x1**3*(4.d0/27.d0)/(1.d0+0.3d0*x1**3)*(1.d0+x1**4.95*0.02))*(1.51d0-x) + (log(1.51d0+0.6d0/1.51d0**0.9) - 0.37123)*(x-1.49d0))/0.02d0
+      endif
+    end function fit
+  end function fit_HBK_rho_DE_ratio
+
+  function HBK_w(epsilon_s, aeq, a) result(w)
+    COOP_REAL::epsilon_s, aeq, a, w
+    w = -1.d0+ 2.d0/3.d0*epsilon_s* F(a/aeq)**2
+  contains
+    function F(x)
+      COOP_REAL::x, F
+      if(x.gt. 0.03d0)then
+         F = sqrt(1.d0+ x**(-3)) - log(x**1.5d0 + sqrt(1.d0+x**3))/x**3
+      else
+         F = x**1.5*(2.d0/3.d0 - x**3/5.d0)
+      endif
+    end function F
+  end function HBK_w
 
 end module coop_ellipse_collapse_mod

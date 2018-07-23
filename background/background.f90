@@ -1131,9 +1131,6 @@ contains
          wp1effcdm(i) =  1.d0 - Q(i)*phi_prime(i)/3.d0
          wp1effde(i) = wp1de(i) + Q(i)*phi_prime(i)/3.d0 * rhom/rhode
       enddo
-!!$      do i=istart-10, istart+10
-!!$         print*, i-istart, phi(i), phidot(i)
-!!$      enddo
       call ode%free()
     end subroutine solve
 
