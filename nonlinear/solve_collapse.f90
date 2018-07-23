@@ -15,6 +15,7 @@ program test
      write(*,*) "========================================================"
      write(*,*) "./Solve -fpk ... -e ... -p ... -out ... [-omm ...(0.3)] [-omk ...(0.)] [-h ...(0.7)] [-w ...(-1)] [-wa ...(0)] [-eps ...(0)] [-fr1 ...(0.178)] [-fr2 ... (0.178)] [-fr3 ... (0.178)] "
      write(*,*) "Examples:"
+     write(*,*) "./Solve -fpk 0  -e 0 -p 0 -eps 0.25 -out testnull.dat"                         
      write(*,*) "./Solve -fpk 3  -e 0.1 -p 0.1 -omm 0.31 -out savex_lcdm.dat"                    
      write(*,*) "./Solve -fpk 2.5 -e 0.2 -p 0.1 -omm 0.31 -w -0.9 -out savex_w.dat"
      write(*,*) "./Solve -fpk 3  -e 0.1 -p 0.1 -omm 0.31 -w -0.9 -wa 0.1 -out savex_w0wa.dat"
