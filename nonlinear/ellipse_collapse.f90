@@ -359,7 +359,10 @@ contains
           this%epsilon_s = epsilon_s
           cosmology_updated = .true.
        endif
-    endif    
+    endif
+    if(abs(this%epsilon_s) .gt. 1.d-5 .and. (abs(this%w+1.d0).gt.1.d-5 .or. abs(this%wa) .gt. 1.d-5))then
+       write(*,*) "Warning: simultaneously setting w, wa, and epsilon_s. Use epsilon_s by default."
+    endif
     if(present(h))then
        if(abs(this%h - h) .gt. 1.d-5)then
           this%h = h
@@ -504,7 +507,7 @@ contains
       elseif(x .gt. x2)then
          fit = log(x+0.6d0/x**0.9) - 0.37123
       else
-         fit = ((x1**3*(4.d0/27.d0)/(1.d0+0.3d0*x1**3)*(1.d0+x1**4.95*0.02))*(1.51d0-x) + (log(1.51d0+0.6d0/1.51d0**0.9) - 0.37123)*(x-1.49d0))/0.02d0
+         fit = ((x1**3*(4.d0/27.d0)/(1.d0+0.3d0*x1**3)*(1.d0+x1**4.95*0.02))*(x2-x) + (log(x2+0.6d0/x2**0.9) - 0.37123)*(x-x1))/(x2-x1)
       endif
     end function fit
   end function fit_HBK_rho_DE_ratio
