@@ -25,7 +25,7 @@ module coop_ellipse_collapse_mod
      COOP_REAL::Omega_r, Omega_de
      COOP_REAL::Omega_k = 0.d0
      COOP_REAL::h = 0.7d0
-     COOP_REAL::T_CMB = 2.726  !!set to zero to turn off radiation effects
+     COOP_REAL::T_CMB = 0 !2.726  !!set to zero to turn off radiation effects, for comparison with peakpatch
      logical::is_spherical = .false.
      COOP_INT::num_ode_vars = 6
      COOP_REAL,dimension(3)::collapse_a_ratio = (/ 0.18d0, 0.18d0, 0.18d0 /)
