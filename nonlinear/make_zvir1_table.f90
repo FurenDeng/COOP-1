@@ -7,7 +7,7 @@ program test
   !!  (F_pk, e_nu, p_nu, zvir1)
   COOP_INT, parameter::nthreads = 8
   type(coop_ellipse_collapse_params),dimension(nthreads)::params
-  COOP_REAL::Omega_m,w, Omega_k, h
+  COOP_REAL::Omega_m,w, Omega_k, h, wa, epsilon_s
   COOP_REAL,dimension(:,:,:),allocatable::zvir1
   COOP_REAL,dimension(:),allocatable::f, p, e
   COOP_INT::nf, np, ne, if, ie, ip, ithread
@@ -17,7 +17,7 @@ program test
   COOP_STRING::output
   if(iargc().lt.2)then
      write(*,*) "========================================================"
-     write(*,*) "./TabZ1 -out ... [-binary ...(T)] [-numf ...(100)] [-nume ...(50)] [-nump ...(100)] [-logf ...(T)] [-fmax ...(15)] [-fmin ...(1.5)] [-emax ...(1)] [-emin ...(0)] [-pmax ...(emax)] [-pmin ...(-emax)] ... [-omm ...(0.3)] [-omk ...(0.)] [-h ...(0.7)] [-w ...(-1)] [-fr1 ...(0.178)] [-fr2 ... (0.178)] [-fr3 ... (0.178)]"
+     write(*,*) "./TabZ1 -out ... [-binary ...(T)] [-numf ...(100)] [-nume ...(50)] [-nump ...(100)] [-logf ...(T)] [-fmax ...(15)] [-fmin ...(1.5)] [-emax ...(1)] [-emin ...(0)] [-pmax ...(emax)] [-pmin ...(-emax)] ... [-omm ...(0.3)] [-omk ...(0.)] [-h ...(0.7)] [-w ...(-1)] [-wa...(0)] [-eps...(0)] [-fr1 ...(0.178)] [-fr2 ... (0.178)] [-fr3 ... (0.178)]"
      write(*,*) "Examples:"
      write(*,*) "./TabZ1 -out mytable.dat"
      write(*,*) "./TabZ1 -out mytable.dat -numf 200 -nume 200 -nump 200"
@@ -32,6 +32,8 @@ program test
   call coop_get_command_line_argument(key = "omk", arg = Omega_k, default = 0.d0)
   call coop_get_command_line_argument(key = "h", arg = h, default = 0.7d0)
   call coop_get_command_line_argument(key = "w", arg = w, default = -1.d0)
+  call coop_get_command_line_argument(key = "wa", arg = wa, default = 0.d0)
+  call coop_get_command_line_argument(key = "eps", arg = epsilon_s, default = 0.d0)
   call coop_get_command_line_argument(key = "fr1", arg = params(1)%collapse_a_ratio(1), default = 0.178d0)
   call coop_get_command_line_argument(key = "fr2", arg = params(1)%collapse_a_ratio(2), default = 0.178d0)
   call coop_get_command_line_argument(key = "fr3", arg = params(1)%collapse_a_ratio(3), default = 0.178d0)
@@ -57,7 +59,7 @@ program test
      write(*,*) "check your numf x nume x nump; table size is too big"
      stop
   endif
-  call params(1)%init(Omega_m = Omega_m, Omega_k = Omega_k, h = h, w = w)
+  call params(1)%init(Omega_m = Omega_m, Omega_k = Omega_k, h = h, w = w, wa=wa, epsilon_s = epsilon_s)
   allocate(f(nf), p(np), e(ne), zvir1(np, ne, nf))
   call coop_set_uniform(nf, f, fmin, fmax, logscale = logf)
   call coop_set_uniform(ne, e, emin, emax)
