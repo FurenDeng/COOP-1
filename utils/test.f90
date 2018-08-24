@@ -8,7 +8,7 @@ module tmp
   COOP_REAL,parameter::H0 = 1.d0
   COOP_REAL,parameter::rho_crit0 = 3.d0*Mpl**2*H0**2  
   COOP_REAL,parameter::omegar = 4.17e-5/h**2 !!calc "2.726**4*4*3.14159**4/45*1.381e-3**4/6.626e-4**2*3.0857e7**2/2.9979e8**4/4.341e-9**2*(1+7./8.*(4./11.)**(4./3.)*3.)"
-  COOP_REAL,parameter::omegak = 0
+  COOP_REAL,parameter::omegak = 0.1
   COOP_REAL,parameter::omegaphi = 1.d0-omegam-omegak-omegar
   COOP_REAL,parameter::aeq = (omegam/omegaphi)**(1.d0/3.d0)
   COOP_REAL::a_eq = aeq
@@ -18,7 +18,7 @@ module tmp
   COOP_REAL::epsilon_inf=0. !!TBD
   COOP_REAL::zeta_s=0. !!TBD
   COOP_REAL::alpha  !!TBD
-  COOP_REAL,parameter::beta = -2.d0
+  COOP_REAL,parameter::beta = -1.d0
   COOP_REAL,parameter::lambda = 0.6d0
 
 #define EXPONENTIAL 0
@@ -81,7 +81,7 @@ contains
   function wp1(a) 
     COOP_REAL::a, wp1
     COOP_REAL:: epss
-    COOP_REAL::mu, mu3, sqrtepss, sqrtepsinf, diff, delta, f, s1, f2, s0,  qpsign
+    COOP_REAL::mu, mu3, sqrtepss, sqrtepsinf, diff, delta, f, s1, f2, s0,  qpsign, lam
     if(epsilon_s .ge. 0.d0)then
        qpsign = 1.d0
        epss = epsilon_s
@@ -91,7 +91,7 @@ contains
     endif
     sqrtepss = sqrt(epss)
     sqrtepsinf = sqrt(epsilon_inf)
-    diff = sqrtepss - coop_sqrt2 * sqrtepsinf
+    diff = sqrtepss - sqrt(2./(1.-omegak)) * sqrtepsinf
     delta = (sqrtepsinf + (0.91-0.78*omegam+(0.236-0.76*omegam)*zeta_s)*diff)**2 &
          + (sqrtepsinf + (0.533-0.1*zeta_s)*diff)**2 
     a_eq = (omegam/omegaphi)**(1.d0/(3.d0-qpsign*delta))
@@ -107,7 +107,9 @@ contains
        f2 = mu3*(1.d0/coop_sqrt2 - (coop_sqrt2/3.d0)*mu3)  - f
     endif
     s0 = sqrtepsinf*sqrt(((4.d0/3.d0*omegar) + omegam*a)/(omegar+omegam*a))
-    wp1 = (2.d0/3.d0)*qpsign*(s0 + (sqrtepss  - coop_sqrt2*s0)*(qwf(mu, omegak/omegam) + zeta_s * f2))**2
+    lam = omegak/omegam*a_eq
+    wp1 = (2.d0/3.d0)*qpsign*(s0 + (sqrtepss  -sqrt(2./(1.-omegak))*s0)*(qwf(mu, lam) + zeta_s * f2))**2
+   ! wp1 = (2.d0/3.d0)*qpsign*(s0 + (sqrtepss  - coop_sqrt2*s0)*(f + zeta_s * f2))**2
   end function wp1
 
 
@@ -185,7 +187,8 @@ program Test
 
   call setnorm()
   print*, "w(z=0) = ", wp1(1.d0)-1.d0 !!do not delete this line; it is used to set up a_eq
-  lnaeq = log(a_eq)
+  print*, "a_eq = ", a_eq 
+  lnaeq = log(a_eq) !!now use the more accurate a_eq to set epsilon_s etc.
   call getH(mid)
   if(trim(fname).ne.'')then
      call output%open(fname)
@@ -194,7 +197,7 @@ program Test
   endif
   write(output%unit, "(A4, I6, 4G14.5)") "#   ", POTENTIAL_TYPE , alpha/Mpl**2/H0**2/3.d0, beta, lambda, omegak
   write(output%unit, "(A4, 2G14.5)") "#   ", phi_ini/Mpl, dotphi_ini/Mpl**2
-  write(output%unit, "(A4, 3G14.5)") "#   ", epsilon_s, epsilon_inf, zeta_s  
+  write(output%unit, "(A4, 4G14.5)") "#   ", epsilon_s, epsilon_inf, zeta_s, a_eq  
   call getH(mid, output)
   call output%close()
 contains
@@ -251,7 +254,7 @@ contains
     type(coop_file),optional::fp
     COOP_REAL::phi_up, phi_down, lna_up, lna_down, phieq, wm1, lastdm1, dm1, wp1_up, wp1_down, wp1eq, goodzs, minwdiff, wdiff
     alpha = norm*Mpl**2*H0**2
-    call ode%init(n=3, method=COOP_ODE_DVERK, tol = 1.d-5)
+    call ode%init(n=3, method=COOP_ODE_DVERK, tol = 1.d-6)
     call ode%set_initial_conditions(tini, yini)
     call scalar_field_evolve(3, ode%x, ode%y, ode%yp)  
     if(present(fp))write(fp%unit,"(3G14.5)") exp(ode%LNA), (ode%DOTPHI**2/2.d0-potential(ode%PHI))/(ode%DOTPHI**2/2.d0+potential(ode%PHI)), wp1(exp(ode%LNA))-1.d0
@@ -314,9 +317,9 @@ contains
        epsilon_inf = 0.d0
 #endif
        minwdiff = 1.d99
-       do i=-100,100
+       do i=-100, 100
           zeta_s = i*0.01d0
-          wdiff = abs(wp1(aeq)-wp1eq)
+          wdiff = abs(wp1(a_eq)-wp1eq)
           if(wdiff .lt. minwdiff)then
              goodzs = zeta_s
              minwdiff = wdiff
