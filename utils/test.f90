@@ -19,7 +19,7 @@ module tmp
   COOP_REAL::zeta_s=0. !!TBD
   COOP_REAL::alpha  !!TBD
   COOP_REAL,parameter::beta = -1.d0
-  COOP_REAL,parameter::lambda = 0.6d0
+  COOP_REAL,parameter::lambda = 1.d0
 
 #define EXPONENTIAL 0
 #define POWERLAW 1
@@ -92,7 +92,7 @@ contains
     sqrtepss = sqrt(epss)
     sqrtepsinf = sqrt(epsilon_inf)
     diff = sqrtepss - sqrt(2./(1.-omegak)) * sqrtepsinf
-    delta = (sqrtepsinf + (0.91-0.78*omegam+(0.236-0.76*omegam)*zeta_s)*diff)**2 &
+    delta = (sqrtepsinf + (0.91-0.78*omegam/(1.-omegak)+(0.236-0.76*omegam/(1.-omegak))*zeta_s)*diff)**2 &
          + (sqrtepsinf + (0.533-0.1*zeta_s)*diff)**2 
     a_eq = (omegam/omegaphi)**(1.d0/(3.d0-qpsign*delta))
     mu = a/a_eq

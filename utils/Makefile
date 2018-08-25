@@ -18,8 +18,8 @@ $(LIB): $(OBJ)
 Test: $(OBJ) test.o $(TYPEDEF)/libcooptypedef.a
 	$(FC) $(FFLAGS) $(INCLUDE) -o $@ $(OBJ) test.o $(LINK)
 
-GAS: $(OBJ) gasmodel.o rungas.o $(TYPEDEF)/libcooptypedef.a
-	$(FC) $(FFLAGS) $(INCLUDE) -o $@ $(OBJ) gasmodel.o rungas.o $(LINK)
+Test2: $(OBJ) test2.o $(TYPEDEF)/libcooptypedef.a
+	$(FC) $(FFLAGS) $(INCLUDE) -o $@ $(OBJ) test2.o $(LINK)
 
 LSQ: $(OBJ) leastsq.o $(TYPEDEF)/libcooptypedef.a
 	$(FC) $(FFLAGS) $(INCLUDE) -o $@ $(OBJ) leastsq.o $(LINK)

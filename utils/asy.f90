@@ -1358,7 +1358,7 @@ contains
     logical do_raw, eval_x, eval_y
    
     if(.not. coop_file_exists(filename))then
-       call coop_return_error("coop_asy_curve_from_file", "The data file "//trim(filename)//" does not exist", "stop")
+       call coop_return_error("coop_asy_plot_file", "The data file "//trim(filename)//" does not exist", "stop")
     endif
     m = coop_file_numlines(filename)
     ncols1 = coop_file_numColumns(filename)
