@@ -11,7 +11,7 @@ program plot
   if(yorn .eq. "Y" .or. yorn .eq. "y")then
      call system("scp gw.cita.utoronto.ca:~/work/doc/info/usr/usr.txt ./")
   else
-     call system("cp ../../../doc/info/usr/usr.txt ./"
+     call system("cp ../../../doc/info/usr/usr.txt ./")
   endif
   call coop_file_decrypt("usr.txt", "deusr.txt")  
 end program plot
