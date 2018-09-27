@@ -13,7 +13,6 @@ program test
   type(coop_dynamic_array_integer)::inds  
   type(coop_file)::fp
   logical::gf
-  call coop_MPI_init()
   if(iargc().le.0)then
      write(*,"(A)") "----------------------------------------------------------"     
      write(*,"(A)") "Syntax:"
@@ -111,6 +110,7 @@ program test
      enddo
   endif
   call fp%open(trim(adjustl(prefix))//"_V1.txt", "w")
+  write(fp%unit, "(3A16)") "#nu      ", "c V1 ln(V1/V1_G)", " V1/V1_G "
   V1 = max(V1, 0.)  !!get rid of negative V1's due to numerical noise
   do i=1, nnu
      gauss_V1 = exp(-nu(i)**2/2.d0)/sqrt(8.d0)
@@ -118,8 +118,7 @@ program test
      if(V1(i) .le. 0.)then
         V1(i) = gauss_V1
      endif
-     write(fp%unit, "(3E16.7)")  nu(i), V1(i) * sqrt(8.d0/coop_2pi) * log( V1(i) * exp(nu(i)**2/2.d0) * sqrt(8.d0)), max(rat, 0.)
+     write(fp%unit, "(3E16.7)")  nu(i), V1(i) * log(max(rat,1.d-8)), rat
   enddo
   call fp%close()
-  call coop_MPI_finalize()
 end program test

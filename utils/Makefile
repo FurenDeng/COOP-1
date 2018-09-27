@@ -6,7 +6,7 @@ include ../configure.in
 include ../compile_rules.in
 
 LIB = libcooputils.a
-OBJ = MPIutils.o evalstr.o  specfunc.o list.o random.o cholesky.o matrix.o interpolation.o integrate.o ode.o file_io.o ndprob.o asy.o  fft.o jlbrute.o  hankel.o nn.o inifile.o gaussian_peak.o sphere.o coop_fitsio.o wrapper.o 
+OBJ = MPIutils.o evalstr.o  specfunc.o list.o random.o cholesky.o matrix.o interpolation.o integrate.o ode.o file_io.o ndprob.o asy.o  fft.o jlbrute.o  hankel.o nn.o inifile.o gaussian_peak.o sphere.o coop_fitsio.o wrapper.o parabolaU.o
 
 #threejs.o 
 
@@ -20,6 +20,13 @@ Test: $(OBJ) test.o $(TYPEDEF)/libcooptypedef.a
 
 Test2: $(OBJ) test2.o $(TYPEDEF)/libcooptypedef.a
 	$(FC) $(FFLAGS) $(INCLUDE) -o $@ $(OBJ) test2.o $(LINK)
+
+Test3: $(OBJ) test3.o $(TYPEDEF)/libcooptypedef.a
+	$(FC) $(FFLAGS) $(INCLUDE) -o $@ $(OBJ) test3.o $(LINK)
+
+Szeq: 	$(OBJ) search_zeq.o $(TYPEDEF)/libcooptypedef.a
+	$(FC) $(FFLAGS) $(INCLUDE) -o $@ $(OBJ) search_zeq.o $(LINK)
+
 
 LSQ: $(OBJ) leastsq.o $(TYPEDEF)/libcooptypedef.a
 	$(FC) $(FFLAGS) $(INCLUDE) -o $@ $(OBJ) leastsq.o $(LINK)

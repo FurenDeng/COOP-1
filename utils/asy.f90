@@ -2678,7 +2678,7 @@ contains
              image(i, j) = f(xmin+dx*(i-0.5), ymin+dy*(j-0.5)) 
           enddo
        enddo
-       image = image - sum(image)/n**2       
+       image = image - sum(image)/n**2   !!mean    
        if(present(countcut))then
           call coop_array_get_threshold(image, countcut, threshold)
        elseif(present(rmscut))then

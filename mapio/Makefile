@@ -67,6 +67,9 @@ UDG: $(OBJ) udgrade.o
 Test: $(OBJ) test.o
 	$(FC) $(FFLAGS) $(INCLUDE) -o $@ $(OBJ) test.o $(LINK)
 
+Test2: $(OBJ) test2.o
+	$(FC) $(FFLAGS) $(INCLUDE) -o $@ $(OBJ) test2.o $(LINK)
+
 ClFormat: $(OBJ) clform.o
 	$(FC) $(FFLAGS) $(INCLUDE) -o $@ $(OBJ) clform.o $(LINK)
 
