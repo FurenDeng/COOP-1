@@ -1,1 +1,1 @@
-#define MAINPATH "/home/zqhuang/work/scilibs/COOP"
+#define MAINPATH "/scratch/r/rbond/frdeng/cp_example/COOP"

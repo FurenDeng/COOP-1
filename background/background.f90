@@ -923,7 +923,7 @@ contains
     class(coop_cosmology_background)::this
     COOP_REAL::Omega_c, Omega_b, Omega_cpl
     type(coop_function)::Vofphi, intQofphi
-    COOP_INT::err
+    COOP_INT::err,check_i
     COOP_REAL::norm, fac
     logical, optional::normalize_V
 #if DO_COUPLED_DE
@@ -934,7 +934,7 @@ contains
     COOP_INT::i
     COOP_REAL, parameter::minphi = 1.d-99
     COOP_REAL::Qrhoma3_at_minphi, Vp_at_minphi, V_at_minphi, Q_at_minphi, dQdphi_at_minphi, m2_at_minphi
-    COOP_REAL::norm_up, norm_down, norm_mid
+    COOP_REAL::norm_up, norm_down, norm_mid, phi_check(ns)
 
     this%Omega_c_bare = Omega_c
     this%Omega_b_bare = Omega_b
@@ -1026,6 +1026,18 @@ contains
     endif
 
     de%cplde_intQofphi = intQofphi
+
+    call coop_set_uniform(ns, phi_check, 1.d-81, exp(de%cplde_Vofphi%xmax), logscale = .true.)
+
+    open(unit=1,file='./DE.txt',status = 'replace')
+    write(1,*)'phimin_of_V: ',exp(de%cplde_Vofphi%xmin), 'phimin_of_V: ', exp(de%cplde_Vofphi%xmax)
+    write(1,"(8A16)")' a',' phi(a)',' Q(a)',' V(a)',' phi',' intQofphi(phi)',' V(phi)',' dVdphiofphi'
+    do check_i = 1, ns
+      write(1,"(8E16.7)")exp(lna(check_i)), de%cplde_phi_lna%eval(lna(check_i)), de%cplde_Q%eval(a(check_i)), exp(de%cplde_lnV_lna%eval(lna(check_i))),&
+                         phi_check(check_i), de%cplde_intQofphi%eval(phi_check(check_i)), de%cplde_Vofphi%eval(phi_check(check_i)), de%cplde_Vofphi%derivative(phi_check(check_i))
+    end do
+    write(*,*)'written into DE.txt!'
+    close(1)
 
     call this%add_species(cdm)    
     if(this%baryon_is_coupled )then

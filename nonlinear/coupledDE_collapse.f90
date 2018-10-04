@@ -30,6 +30,7 @@ module coop_coupledDE_collapse_mod
      type(coop_cosmology_firstorder)::cosmology
      logical::normalize_to_early = .false.  !!if true, set the initial delta = F_pk * a
      type(coop_function)::Dbya, dlnDdlna
+     COOP_REAL::omb_norm, omc_norm, H0_norm
    contains
      procedure::update_fep => coop_coupledDE_collapse_params_update_fep 
      procedure::free => coop_coupledDE_collapse_params_free  !!subroutine; no argument; release the memory allocated for this object
@@ -54,10 +55,16 @@ contains
     !!set inital vector y = ( x_1, x_2,  x_3,  d x_1/dt, d x_2/dt, d x_3/dt, phi, d phi/dt ) at a = a_ini
     class(coop_coupledDE_collapse_params)::this
     COOP_REAL,intent(IN)::a_ini
-    COOP_REAL::y(:), D_ini,  dadt_ini, corr(3), suml, suml2, H_D
+    COOP_REAL::y(:), D_ini, D_ini_norm,  dadt_ini, corr(3), suml, suml2, H_D, H_D_norm
     if(this%normalize_to_early)then
-       D_ini = coop_growth_fitting(0.3d0, -1.d0, 1.d0/a_ini - 1.d0) 
-       H_D = sqrt(0.3/a_ini**3 + 0.7)
+!       write(*,*)this%omb_norm + this%omc_norm
+       D_ini_norm = coop_growth_fitting(this%omb_norm + this%omc_norm, -1.d0, 1.d0/a_ini - 1.d0) 
+       !stop 'check!'
+       H_D_norm = sqrt(0.3/a_ini**3 + 0.7)
+       D_ini = this%Growth_D(a_ini)
+       H_D = this%Growth_H_D(a_ini)
+       this%lambda = this%lambda * D_ini_norm / D_ini
+!       write(*,*)'ratio of normalization: ', D_ini_norm / D_ini
     else
        D_ini = this%Growth_D(a_ini)
        H_D = this%Growth_H_D(a_ini)
@@ -376,6 +383,18 @@ contains
     COOP_REAL::F_pk, e_nu, p_nu, dnorm
     COOP_REAL::a(n), Dbya(n), dlnDdlna(n)
     call coop_dictionary_lookup(params, "normalize_to_early", this%normalize_to_early, .false.)
+    if(this%normalize_to_early)then
+       call coop_dictionary_lookup(params, "H0",this%H0_norm,70.d0)
+       call coop_dictionary_lookup(params, "ombh2",this%omb_norm,-1.d0)
+       call coop_dictionary_lookup(params, "omch2",this%omc_norm,-1.d0)
+       if(this%omb_norm.lt.0.d0 .or. this%omc_norm.lt.0.d0)then
+          stop 'must input ombh2 and omch2 to normalize fpk!'
+       endif
+       this%omb_norm = this%omb_norm*10000.d0/this%H0_norm**2
+       this%omc_norm = this%omc_norm*10000.d0/this%H0_norm**2
+       !write(*,*)this%omb_norm, this%omc_norm
+    endif
+    write(*,*)"normalize_to_early: ", this%normalize_to_early
     !set up cosmology
     if(present(update_cosmology))then
        if(update_cosmology)then

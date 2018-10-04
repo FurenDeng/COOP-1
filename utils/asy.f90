@@ -1358,7 +1358,7 @@ contains
     logical do_raw, eval_x, eval_y
    
     if(.not. coop_file_exists(filename))then
-       call coop_return_error("coop_asy_plot_file", "The data file "//trim(filename)//" does not exist", "stop")
+       call coop_return_error("coop_asy_curve_from_file", "The data file "//trim(filename)//" does not exist", "stop")
     endif
     m = coop_file_numlines(filename)
     ncols1 = coop_file_numColumns(filename)
@@ -2678,7 +2678,7 @@ contains
              image(i, j) = f(xmin+dx*(i-0.5), ymin+dy*(j-0.5)) 
           enddo
        enddo
-       image = image - sum(image)/n**2   !!mean    
+       image = image - sum(image)/n**2       
        if(present(countcut))then
           call coop_array_get_threshold(image, countcut, threshold)
        elseif(present(rmscut))then

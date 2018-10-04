@@ -15,6 +15,7 @@ program test
   COOP_INT::nlist
   COOP_INT,allocatable::listpix(:)
   logical::gf
+  call coop_MPI_init()
   if(iargc().le.0)then
      write(*,"(A)") "----------------------------------------------------------"     
      write(*,"(A)") "Syntax:"
@@ -54,9 +55,9 @@ program test
 
 
      call map%scan_local_minkowski0(1, nu, meanmap, rmsmap, V0map, r_deg, do_gaussian_fit = gf)  
-     call meanmap%write(trim(adjustl(prefix))//"_mean.fits")
-     call rmsmap%write(trim(adjustl(prefix))//"_rms.fits")
-     call V0map%write(trim(adjustl(prefix))//"_V0.fits")
+!!$     call meanmap%write(trim(adjustl(prefix))//"_mean.fits")
+!!$     call rmsmap%write(trim(adjustl(prefix))//"_rms.fits")
+!!$     call V0map%write(trim(adjustl(prefix))//"_V0.fits")
 
      if(trim(mask_file) .ne. "NONE")then
         call mask%read(mask_file, nested = .true.)
@@ -107,7 +108,6 @@ program test
      enddo
   endif
   call fp%open(trim(adjustl(prefix))//"_V0.txt", "w")
-  write(fp%unit, "(3A16)") "# nu    ", " A' log(A'/A'_G) ",  " A'/A'_G "
   do i=1, nnu-1
      nuc = (nu(i)+nu(i+1))/2.d0
      gauss_dAdnu = exp(-nuc**2/2.d0)/sqrt(coop_2pi)
@@ -119,4 +119,5 @@ program test
      write(fp%unit, "(3E16.7)") nuc, dAdnu*log(dAdnu/gauss_dAdnu), rat
   enddo
   call fp%close()
+  call coop_MPI_finalize()
 end program test

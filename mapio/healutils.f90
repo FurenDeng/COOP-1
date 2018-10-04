@@ -161,7 +161,6 @@ module coop_healpix_mod
      procedure :: scan_local_minkowski0 => coop_healpix_maps_scan_local_minkowski0
      procedure :: local_disk_minkowski1 => coop_healpix_maps_local_disk_minkowski1
      procedure :: scan_local_minkowski1 => coop_healpix_maps_scan_local_minkowski1
-     procedure :: latamp => coop_healpix_maps_latamp
   end type coop_healpix_maps
 
   type coop_healpix_patch
@@ -1425,12 +1424,6 @@ contains
        call this%set_field(4, "LE")
        call this%set_field(5, "ED1")
        call this%set_field(6, "ED2")              
-    case("B", "BPOLARISATION")
-       call this%set_field(2, "QLB")
-       call this%set_field(3, "ULB")
-       call this%set_field(4, "LB")
-       call this%set_field(5, "BD1")
-       call this%set_field(6, "BD2")              
     case default
        write(*,*) trim(this%fields(1))
        stop "get_QULDD: only supprt I, ZETA and E maps"
@@ -1497,12 +1490,6 @@ contains
        call this%set_field(4, "LE")
        call this%set_field(5, "ED1")
        call this%set_field(6, "ED2")
-    case("B", "BPOLARISATION")
-       call this%set_field(2, "QLB")
-       call this%set_field(3, "ULB")
-       call this%set_field(4, "LB")
-       call this%set_field(5, "BD1")
-       call this%set_field(6, "BD2")
     case default
        write(*,*) trim(this%fields(1))
        stop "get_QUL6D: only supprt I, ZETA and E maps"
@@ -1612,14 +1599,6 @@ contains
        call this%set_field(6, "ED2")
        call this%set_field(7, "ED1")
        call this%set_field(8, "ED2")
-    case("B", "BPOLARISATION")
-       call this%set_field(2, "QLB")
-       call this%set_field(3, "ULB")
-       call this%set_field(4, "LB")
-       call this%set_field(5, "BD1")
-       call this%set_field(6, "BD2")
-       call this%set_field(7, "BD1")
-       call this%set_field(8, "BD2")
     case default
        write(*,*) trim(this%fields(1))
        stop "get_QUL4D: only supprt I, ZETA and E maps"
@@ -1829,7 +1808,7 @@ contains
              call this%set_field(i, coop_healpix_maps_default_genre)
           enddo
        case("TQULDD")
-          if(this%nmaps.lt.6) stop "For TQUDD map you need at least 6 maps"
+          if(this%nmaps.lt.6) stop "For TQUL map you need at least 4 maps"
           call this%set_units("muK")
           call this%set_field(1, "I")
           call this%set_field(2, "QLT")
@@ -1851,7 +1830,7 @@ contains
              call this%set_field(i,  coop_healpix_maps_default_genre)  
           enddo
        case("ZQULDD")
-          if(this%nmaps.lt.6) stop "For ZQULDD map you need at least 6 maps"
+          if(this%nmaps.lt.6) stop "For TQUL map you need at least 4 maps"
           call this%set_units("10^{-5}")
           call this%set_field(1, "ZETA")
           call this%set_field(2, "QLZ")
@@ -1863,7 +1842,7 @@ contains
              call this%set_field(i,  coop_healpix_maps_default_genre)  
           enddo                              
        case("EQUL")
-          if(this%nmaps.lt.4) stop "For EQUL map you need at least 4 maps"
+          if(this%nmaps.lt.4) stop "For TQUL map you need at least 4 maps"
           call this%set_units("muK")
           call this%set_field(1, "E")
           call this%set_field(2, "QLE")
@@ -1872,18 +1851,8 @@ contains
           do i=5, this%nmaps
              call this%set_field(i,  coop_healpix_maps_default_genre)  
           enddo
-       case("BQUL")
-          if(this%nmaps.lt.4) stop "For BQUL map you need at least 4 maps"
-          call this%set_units("muK")
-          call this%set_field(1, "B")
-          call this%set_field(2, "QLB")
-          call this%set_field(3, "ULB")
-          call this%set_field(4, "LB")
-          do i=5, this%nmaps
-             call this%set_field(i,  coop_healpix_maps_default_genre)  
-          enddo
        case("EQULDD")
-          if(this%nmaps.lt.6) stop "For EQUDD map you need at least 6 maps"
+          if(this%nmaps.lt.6) stop "For TQUL map you need at least 4 maps"
           call this%set_units("muK")
           call this%set_field(1, "E")
           call this%set_field(2, "QLE")
@@ -1893,19 +1862,7 @@ contains
           call this%set_field(6, "ED2")          
           do i=7, this%nmaps
              call this%set_field(i,  coop_healpix_maps_default_genre)  
-          enddo
-       case("BQULDD")
-          if(this%nmaps.lt.6) stop "For BQUDD map you need at least 6 maps"
-          call this%set_units("muK")
-          call this%set_field(1, "B")
-          call this%set_field(2, "QLB")
-          call this%set_field(3, "ULB")
-          call this%set_field(4, "LB")
-          call this%set_field(5, "BD1")
-          call this%set_field(6, "BD2")          
-          do i=7, this%nmaps
-             call this%set_field(i,  coop_healpix_maps_default_genre)  
-          enddo                                        
+          enddo                              
        case("TQTUT")
           if(this%nmaps.lt.3) stop "For TQTUT map you need at least 3 maps"
           call this%set_units("muK")
@@ -2490,16 +2447,16 @@ contains
     if(present(imap))then
        i = imap
        select case(trim(coop_str_numUpperalpha(this%fields(i))))
-       case("INTENSITY", "TEMPERATURE", "MASK", "TMASK", "PMASK", "EPOLARISATION", "BPOLARISATION", "E", "B", "ZETA", "Z", "I", "T", "M", "LT", "LZ", "LE",  "LB","ISTOKES", "", "LNI", "GENERAL", "LNLT", "INTBEAM", "INT")
+       case("INTENSITY", "TEMPERATURE", "MASK", "TMASK", "PMASK", "EPOLARISATION", "BPOLARISATION", "E", "B", "ZETA", "Z", "I", "T", "M", "LT", "LZ", "LE", "ISTOKES", "", "LNI", "GENERAL", "LNLT", "INTBEAM", "INT")
           this%spin(i) = 0
        case("POL", "POLBEAM")
           this%spin(i) = 2
        case("ID1", "ID2", "ZD1", "ZD2", "ED1", "ED2", "BD1", "BD2", "LNID1", "LNID2", "QD1", "QD2", "UD1", "UD2")
           this%spin(i) = 1
-       case("QPOLARISATION", "Q", "QT", "QLT", "QLZ", "QZ", "QLE", "QLB", "QSTOKES", "LNQ", "LNQT", "LNQLT")
+       case("QPOLARISATION", "Q", "QT", "QLT", "QLZ", "QZ", "QLE", "QSTOKES", "LNQ", "LNQT", "LNQLT")
           this%spin(i) = 2
           this%iq = i
-       case("UPOLARISATION", "U", "UT", "ULT", "ULZ", "UZ", "ULE", "ULB", "USTOKES", "LNU", "LNUT", "LNULT")
+       case("UPOLARISATION", "U", "UT", "ULT", "ULZ", "UZ", "ULE", "USTOKES", "LNU", "LNUT", "LNULT")
           this%spin(i) = 2
           this%iu = i
        case default
@@ -2509,16 +2466,16 @@ contains
     else       
        do i = 1, this%nmaps
           select case(trim(coop_str_numUpperalpha(this%fields(i))))
-          case("INTENSITY", "TEMPERATURE", "MASK", "TMASK", "PMASK", "EPOLARISATION", "BPOLARISATION", "E", "B", "ZETA", "Z", "I", "T", "M", "LT", "LZ", "LE", "LB", "ISTOKES", "", "LNI", "LNLT","INT","INTBEAM")
+          case("INTENSITY", "TEMPERATURE", "MASK", "TMASK", "PMASK", "EPOLARISATION", "BPOLARISATION", "E", "B", "ZETA", "Z", "I", "T", "M", "LT", "LZ", "LE", "ISTOKES", "", "LNI", "LNLT","INT","INTBEAM")
              this%spin(i) = 0
           case("POL", "POLBEAM")
              this%spin(i) = 2
           case("ID1", "ID2", "ZD1", "ZD2", "ED1", "ED2", "BD1", "BD2", "LNID1", "LNID2", "LNQD1", "LNQD2", "LNUD1", "LNUD2","QD1", "QD2", "UD1", "UD2")
              this%spin(i) = 1
-          case("QPOLARISATION", "Q", "QT", "QLT", "QLZ", "QZ", "QLE", "QLB", "QSTOKES", "LNQ", "LNQT", "LNQLT")
+          case("QPOLARISATION", "Q", "QT", "QLT", "QLZ", "QZ", "QLE", "QSTOKES", "LNQ", "LNQT", "LNQLT")
              this%spin(i) = 2
              this%iq = i
-          case("UPOLARISATION", "U", "UT", "ULT", "ULZ", "UZ", "ULE", "ULB", "USTOKES", "LNU", "LNUT", "LNULT")
+          case("UPOLARISATION", "U", "UT", "ULT", "ULZ", "UZ", "ULE", "USTOKES", "LNU", "LNUT", "LNULT")
              this%spin(i) = 2
              this%iu = i
           case default
@@ -6844,49 +6801,7 @@ contains
     enddo
   end subroutine coop_healpix_get_alm2pix
 
-  subroutine coop_healpix_maps_latamp(this, amp, imap, renorm)
-    class(coop_healpix_maps)::this
-    COOP_REAL,dimension(:),intent(OUT)::amp
-    COOP_REAL::theta, phi    
-    COOP_INT,optional::imap
-    COOP_INT::pix, im, n, itheta
-    COOP_REAL::dtheta, w(size(amp)), rtheta
-    logical,optional::renorm
-    if(present(imap))then
-       im = imap
-    else
-       im = 1
-    endif
-    if(this%nmaps .lt. im) stop "healpix_maps_latamp: map index overflow"
-    amp = 0.d0
-    w = 0.d0
-    n = size(amp)
-    dtheta = 2.d0 /(n-1)
-    do pix = 0, this%npix-1
-       call this%pix2ang(pix, theta, phi)
-       rtheta = (1.d0+cos(theta))/dtheta+1.d0
-       itheta = min(floor(rtheta), n-1)
-       rtheta = rtheta - itheta
-       w(itheta) = w(itheta) + (1.d0-rtheta)
-       amp(itheta) = amp(itheta) + this%map(pix, im)*(1.d0-rtheta)
-       w(itheta+1) = w(itheta+1) + rtheta
-       amp(itheta+1) = amp(itheta+1) + this%map(pix, im)*rtheta
-    enddo
-    where(w .ne. 0.d0)
-       amp = amp/w
-    end where
-    if(present(renorm))then
-       if(renorm)then
-          do pix = 0, this%npix-1
-             call this%pix2ang(pix, theta, phi)
-             rtheta = (1.d0+cos(theta))/dtheta+1.d0
-             itheta = min(floor(rtheta), n-1)
-             rtheta = rtheta - itheta
-             this%map(pix, :) =  this%map(pix, :) / (amp(itheta)*(1.d0-rtheta)+ amp(itheta+1)*rtheta)
-          enddo
-       endif
-    endif
-  end subroutine coop_healpix_maps_latamp
+
 end module coop_healpix_mod
 
 

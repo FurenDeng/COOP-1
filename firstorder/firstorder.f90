@@ -1367,12 +1367,16 @@ contains
        call this%set_h(0.d0)
        return
     endif
+    write(*,*)'cde is ok!'
     if(init_level .le. coop_init_level_set_species)return
+    write(*,*)'set up background!'
     call this%setup_background()
     if(init_level .le. coop_init_level_set_background) return
+    write(*,*)'set up Xe!'
     this%optre = tau_re
     call this%set_xe()
     if(init_level .le. coop_init_level_set_xe)return
+    write(*,*)'set up powerspectrum!'
     if(present(As).or.present(ns) .or. present(nrun) .or. present(r) .or. present(nt) .or. present(inflation_consistency))then
        if(present(As))then
           this%As = As
@@ -1842,18 +1846,40 @@ contains
        !!in this case I use fQ for \int Q d\phi
        !! Q = Q0 + dQdphi * phi
        call fQ%init_polynomial( (/ 0.d0, Q0,  dQdphi/2.d0 /) )
+       write(*,*)'Q: Q(phi)!'
+       write(*,*)"de_Q: ", Q0
+       write(*,*)"de_dQdphi: ", dQdphi
 
        !!for potential V(phi) I have two options
        if(fR_epsilon .gt. 0.d0)then  !!use Hu-Sawicki model
           call fofR%init_rational( c_up = (/ 2.d0*fiducial_Lambda /), alpha_up = (/ 0.d0 /), c_down = (/ np_index/fR_epsilon/fiducial_Lambda**np_index , 1.d0 /), alpha_down = (/ np_index, 0.d0 /) ) 
           call coop_convert_fofR_to_Vofphi(fofR, fiducial_Lambda, Vofphi)
+          write(*,*)'V: fR!'
+          write(*,*)'de_fR_epsilon: ',fR_epsilon
+          write(*,*)'de_np_index: ',np_index
        else !! use negative powerlaw
           call Vofphi%init_powerlaw( c= (/ 2.1d0 /), alpha = (/ - np_index /) )
+          write(*,*)'V: powerlaw!'
+          write(*,*)'de_np_index: ',np_index
           !!it is ok to have V(phi) unnormalized, since the code will automatically adjust the normalization to give correct Omega_Lambda
        endif
     else  !!use w(a) and Q(a)  
        !! Q = Q_early + (Q0 - Q_early)*a; both Q0 and Q_early must be >= 0
        call fQ%init_polynomial( (/ Q_early, (Q0-Q_early) /) )
+       write(*,*)'Q: Q(a)!'
+       write(*,*)"de_Q: ", Q0
+       write(*,*) "de_Q_early: ", Q_early
+       if(.not.w_predefined)then
+          write(*,*)'V: HBK'
+          write(*,*)"de_epss: ", eps_s
+          write(*,*)"de_epsinf: ",eps_inf
+          write(*,*)"de_zetas: ",zeta_s
+          write(*,*)"de_betas: ",beta_s
+       else
+          write(*,*)'V: w0, wa'
+          write(*,*)"de_w0", w0
+          write(*,*)'de_wa', wa
+       endif
     endif
 
 #endif
